@@ -1,0 +1,454 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MALAQBI CPMK Assistant</title>
+  <link rel="stylesheet" href="lib/font-awesome.min.css">
+  <link rel="stylesheet" href="sidepanel.css">
+</head>
+<body>
+  <!-- Header -->
+  <header class="app-header">
+    <div class="header-brand">
+      <div class="brand-logo">
+        <i class="fa-solid fa-graduation-cap"></i>
+      </div>
+      <div>
+        <h1 class="brand-title">MALAQBI Assistant</h1>
+        <p class="brand-subtitle">Otomasi CPMK &amp; Sub-CPMK Unsulbar</p>
+      </div>
+    </div>
+    <div id="connection-badge" class="badge badge-offline" title="Status koneksi halaman MALAQBI">
+      <span class="status-dot"></span>
+      <span id="connection-text">Mengecek tab...</span>
+    </div>
+  </header>
+
+  <!-- Navigation Tabs -->
+  <nav class="nav-tabs">
+    <button class="tab-btn active" data-tab="tab-queue" title="Antrian Data CPMK">
+      <i class="fa-solid fa-list-check"></i>
+      Antrian CPMK
+    </button>
+    <button class="tab-btn" data-tab="tab-settings" title="Pengaturan &amp; AI">
+      <i class="fa-solid fa-sliders"></i>
+      Pengaturan
+    </button>
+    <button class="tab-btn" data-tab="tab-logs" title="Riwayat Eksekusi Log">
+      <i class="fa-solid fa-clock-rotate-left"></i>
+      Log
+    </button>
+    <button class="tab-btn" data-tab="tab-developer" title="Profil Pengembang &amp; Informasi Aplikasi">
+      <i class="fa-solid fa-user-tie"></i>
+      Pengembang
+    </button>
+  </nav>
+
+  <!-- TAB 1: ANTRIAN DATA -->
+  <main id="tab-queue" class="tab-content active">
+    <!-- File Dropzone -->
+    <section class="card dropzone-card">
+      <div id="dropzone" class="dropzone">
+        <input type="file" id="file-input" accept=".xlsx, .xls, .csv" hidden>
+        <div class="dropzone-content">
+          <i class="fa-solid fa-file-excel dropzone-icon"></i>
+          <p class="dropzone-title">Tarik &amp; lepas file Excel (.xlsx / .csv)</p>
+          <p class="dropzone-sub">atau <span class="text-maroon font-medium cursor-pointer" id="btn-browse">pilih file dari komputer</span></p>
+        </div>
+      </div>
+
+      <!-- File Info Bar (Hidden until file selected) -->
+      <div id="file-info-bar" class="file-info-bar" style="display: none;">
+        <div class="file-meta">
+          <span class="file-icon"><i class="fa-solid fa-file-excel text-maroon"></i></span>
+          <div>
+            <span id="file-name" class="font-medium text-slate-800">nama_file.xlsx</span>
+            <span id="file-size" class="text-xs text-slate-500 ml-2">(66 KB)</span>
+          </div>
+        </div>
+        <button id="btn-remove-file" class="btn-icon" title="Hapus file"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+
+      <!-- Sheet Selector -->
+      <div id="sheet-selector-wrapper" class="form-group mt-3" style="display: none;">
+        <label for="select-sheet" class="form-label">Pilih Sheet Excel:</label>
+        <select id="select-sheet" class="form-select"></select>
+      </div>
+    </section>
+
+    <!-- Column Mapping Card (Hidden until file parsed) -->
+    <section id="mapping-card" class="card mt-3" style="display: none;">
+      <div class="card-header flex justify-between items-center">
+        <h2 class="card-title">Pemetaan Kolom Form</h2>
+        <button id="btn-ai-detect" class="btn btn-sm btn-outline-maroon" title="Gunakan AI Gemini/OpenAI untuk mendeteksi kolom secara pintar">
+          <i class="fa-solid fa-wand-magic-sparkles mr-1.5"></i>
+          <span>Deteksi AI</span>
+        </button>
+      </div>
+      <p class="text-xs text-slate-500 mb-3">Sesuaikan kolom Excel dengan input formulir MALAQBI:</p>
+
+      <div class="grid grid-cols-1 gap-2.5">
+        <div class="form-row">
+          <label class="form-label-inline">Mata Kuliah:</label>
+          <select id="map-mk" class="form-select form-select-sm"></select>
+        </div>
+        <div class="form-row">
+          <label class="form-label-inline">Kode MK (opsional):</label>
+          <select id="map-kodemk" class="form-select form-select-sm"></select>
+        </div>
+        <div class="form-row">
+          <label class="form-label-inline">Kode CPMK:</label>
+          <select id="map-kodecpmk" class="form-select form-select-sm"></select>
+        </div>
+        <div class="form-row">
+          <label class="form-label-inline">Deskripsi CPMK:</label>
+          <select id="map-desc" class="form-select form-select-sm"></select>
+        </div>
+        <div class="form-row">
+          <label class="form-label-inline">CPL Pendukung:</label>
+          <select id="map-cpl" class="form-select form-select-sm"></select>
+        </div>
+      </div>
+
+      <div class="mt-3 pt-3 border-t border-slate-100 space-y-2">
+        <label class="checkbox-label">
+          <input type="checkbox" id="check-dedupe" checked>
+          <span>Deduplikasi Otomatis (Gabungkan baris Sub-CPMK dengan MK &amp; Kode CPMK sama)</span>
+        </label>
+        <label class="checkbox-label">
+          <input type="checkbox" id="check-skip-existing" checked>
+          <span>Lewati Otomatis jika Kode sudah ada ("The kode has already been taken")</span>
+        </label>
+        <label class="checkbox-label">
+          <input type="checkbox" id="check-autosubmit" checked>
+          <span>Otomatis Klik "Simpan CPMK" (Kirim Form)</span>
+        </label>
+      </div>
+
+      <!-- Filter Mata Kuliah -->
+      <div class="form-group mt-3">
+        <label for="filter-mk" class="form-label">Filter Input Mata Kuliah:</label>
+        <select id="filter-mk" class="form-select form-select-sm">
+          <option value="ALL">-- Semua Mata Kuliah dalam File --</option>
+        </select>
+      </div>
+    </section>
+
+    <!-- Execution & Queue Controls Card -->
+    <section id="queue-controls-card" class="card mt-3" style="display: none;">
+      <div class="queue-stats">
+        <div class="stat-item">
+          <span class="stat-val text-slate-800" id="stat-total">0</span>
+          <span class="stat-label">Total</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-val text-maroon" id="stat-pending">0</span>
+          <span class="stat-label">Antri</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-val text-maroon" id="stat-success">0</span>
+          <span class="stat-label">Sukses</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-val text-amber-600" id="stat-skipped">0</span>
+          <span class="stat-label">Dilewati</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-val text-rose-600" id="stat-failed">0</span>
+          <span class="stat-label">Gagal</span>
+        </div>
+      </div>
+
+      <!-- Progress Bar -->
+      <div class="progress-bar-container mt-3">
+        <div id="progress-bar" class="progress-bar-fill" style="width: 0%;"></div>
+      </div>
+      <div class="flex justify-between text-xs text-slate-500 mt-1">
+        <span id="queue-status-text">Siap memulai</span>
+        <span id="queue-percent-text">0%</span>
+      </div>
+
+      <!-- Action Buttons -->
+      <div class="action-buttons mt-4 flex gap-2">
+        <button id="btn-start-queue" class="btn btn-primary flex-1">
+          <i class="fa-solid fa-play mr-1.5"></i>
+          Mulai Antrian
+        </button>
+        <button id="btn-retry-failed" class="btn btn-outline-danger" style="display: none;" title="Ulangi item yang gagal">
+          <i class="fa-solid fa-rotate-right mr-1.5"></i>
+          Ulangi Gagal
+        </button>
+        <button id="btn-pause-queue" class="btn btn-warning" style="display: none;">
+          <i class="fa-solid fa-pause mr-1.5"></i>
+          Jeda
+        </button>
+        <button id="btn-stop-queue" class="btn btn-danger" style="display: none;">
+          <i class="fa-solid fa-stop mr-1.5"></i>
+          Stop
+        </button>
+      </div>
+
+      <div class="flex items-center justify-between mt-3 pt-2 text-xs text-slate-500 border-t border-slate-100">
+        <span>Jeda Delay Antar Input:</span>
+        <div class="flex items-center gap-1.5">
+          <input type="number" id="input-delay" min="0.5" max="10" step="0.5" value="1.5" class="input-number">
+          <span>detik</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- Table Preview Card -->
+    <section id="preview-card" class="card mt-3 mb-6" style="display: none;">
+      <div class="card-header flex justify-between items-center mb-2">
+        <h2 class="card-title">Daftar Antrian CPMK</h2>
+        <span id="badge-queue-count" class="badge badge-maroon"><i class="fa-solid fa-table-list mr-1"></i>0 Data</span>
+      </div>
+      <div class="table-container">
+        <table class="ods-table" id="table-queue">
+          <thead>
+            <tr>
+              <th style="width: 32px;">#</th>
+              <th>Mata Kuliah</th>
+              <th>Kode</th>
+              <th>CPL</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody id="queue-table-body">
+            <!-- Diisi lewat JavaScript -->
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <!-- TAB 2: PENGATURAN & AI -->
+  <main id="tab-settings" class="tab-content">
+    <div class="card">
+      <h2 class="card-title mb-1">Konfigurasi Kecerdasan AI</h2>
+      <p class="text-xs text-slate-500 mb-4">Pilih engine AI untuk mendeteksi struktur kolom dan pencocokan semantik otomatis.</p>
+
+      <div class="form-group mb-3">
+        <label class="form-label">Provider AI:</label>
+        <div class="grid grid-cols-2 gap-2">
+          <label class="radio-card">
+            <input type="radio" name="ai-provider" value="gemini" checked>
+            <div class="radio-card-content">
+              <span class="font-semibold text-sm">Google Gemini</span>
+              <span class="text-[11px] text-slate-500">Cepat &amp; Akurat</span>
+            </div>
+          </label>
+          <label class="radio-card">
+            <input type="radio" name="ai-provider" value="openai">
+            <div class="radio-card-content">
+              <span class="font-semibold text-sm">OpenAI</span>
+              <span class="text-[11px] text-slate-500">GPT-4o Mini</span>
+            </div>
+          </label>
+        </div>
+      </div>
+
+      <!-- Quick Links Provider API -->
+      <div class="form-group mb-3">
+        <label class="form-label flex justify-between items-center">
+          <span>Dapatkan API Key Resmi:</span>
+          <span class="text-[10px] text-slate-400 font-normal">Buka di tab baru</span>
+        </label>
+        <div class="grid grid-cols-2 gap-2" id="provider-links-container">
+          <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer" id="link-provider-gemini" class="provider-link-card active" title="Buka Google AI Studio untuk membuat API Key Gemini">
+            <div class="flex items-center gap-1.5 overflow-hidden">
+              <i class="fa-brands fa-google text-maroon flex-shrink-0"></i>
+              <div class="truncate">
+                <div class="link-title truncate">Google AI Studio</div>
+                <div class="text-[10px] text-slate-500">Gemini Key Gratis</div>
+              </div>
+            </div>
+            <i class="fa-solid fa-arrow-up-right-from-square text-[10px] text-slate-400 flex-shrink-0 ml-1"></i>
+          </a>
+          <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener noreferrer" id="link-provider-openai" class="provider-link-card" title="Buka OpenAI Platform untuk membuat API Key OpenAI">
+            <div class="flex items-center gap-1.5 overflow-hidden">
+              <i class="fa-solid fa-bolt text-slate-500 flex-shrink-0"></i>
+              <div class="truncate">
+                <div class="link-title truncate">OpenAI Platform</div>
+                <div class="text-[10px] text-slate-500">API Keys Dashboard</div>
+              </div>
+            </div>
+            <i class="fa-solid fa-arrow-up-right-from-square text-[10px] text-slate-400 flex-shrink-0 ml-1"></i>
+          </a>
+        </div>
+      </div>
+
+      <div class="form-group mb-3">
+        <label for="select-ai-model" class="form-label">Model AI:</label>
+        <select id="select-ai-model" class="form-select form-select-sm">
+          <!-- Opsi diisi dinamis sesuai provider -->
+        </select>
+        <div id="wrapper-custom-model" class="mt-2" style="display: none;">
+          <input type="text" id="input-custom-model" placeholder="Masukkan ID model (misal: gemini-3.5-flash-lite)" class="form-input text-xs" spellcheck="false">
+          <p class="text-[10px] text-slate-500 mt-0.5">Ketik identifier model Gemini / OpenAI spesifik Anda.</p>
+        </div>
+        <div class="mt-2 p-2 bg-slate-50 border border-slate-200 rounded text-[11px] text-slate-600 leading-snug">
+          <i class="fa-solid fa-lightbulb text-maroon mr-1"></i>
+          <strong>Rekomendasi Terbaik:</strong> Gunakan <code>gemini-3.5-flash-lite</code> (sangat cepat, kuota hemat, &amp; bebas kendala overload/antrean) atau <code>gpt-4o-mini</code> untuk kestabilan ekstra.
+        </div>
+      </div>
+
+      <div class="form-group mb-3">
+        <div class="flex justify-between items-center mb-1">
+          <label for="input-api-key" class="form-label mb-0">API Key:</label>
+          <span id="badge-key-status" class="badge badge-maroon text-[10px] py-0.5 px-2" style="display: none;">
+            <i class="fa-solid fa-shield-halved text-[9px] mr-1"></i> Terproteksi
+          </span>
+        </div>
+        <div class="input-with-icon">
+          <input type="password" id="input-api-key" placeholder="Masukkan API Key Gemini / OpenAI..." class="form-input input-secure" autocomplete="new-password" spellcheck="false">
+          <button type="button" id="btn-clear-key" class="btn-eye" title="Hapus &amp; Ganti API Key Baru" style="display: none;">
+            <i class="fa-solid fa-pen-to-square"></i>
+          </button>
+        </div>
+        <p class="text-[11px] text-slate-400 mt-1 flex items-center gap-1">
+          <i class="fa-solid fa-lock text-maroon"></i>
+          <span>Tersimpan privat &amp; terlindungi (anti-intip, anti-copy).</span>
+        </p>
+      </div>
+
+      <div class="form-group mb-4" id="group-base-url" style="display: none;">
+        <label for="input-base-url" class="form-label">Custom Base URL (Opsional):</label>
+        <input type="url" id="input-base-url" placeholder="https://api.openai.com/v1" class="form-input">
+      </div>
+
+      <div class="flex gap-2">
+        <button id="btn-test-api" class="btn btn-outline-maroon flex-1">
+          <i class="fa-solid fa-vial-circle-check mr-1.5"></i>
+          Tes Koneksi API
+        </button>
+        <button id="btn-save-settings" class="btn btn-primary flex-1">
+          <i class="fa-solid fa-floppy-disk mr-1.5"></i>
+          Simpan
+        </button>
+      </div>
+
+      <div id="api-test-result" class="alert mt-3" style="display: none;"></div>
+    </div>
+
+    <!-- Info Kurikulum & Akun -->
+    <div class="card mt-3">
+      <h2 class="card-title mb-1">Informasi Akun MALAQBI</h2>
+      <p class="text-xs text-slate-500 mb-3">Mendeteksi opsi kurikulum dan akun prodi yang sedang aktif:</p>
+      <div id="detected-account-info" class="text-xs text-slate-600 bg-slate-50 p-3 rounded-lg border border-slate-200 space-y-1">
+        <div><strong>Status Halaman:</strong> <span id="info-page-status">-</span></div>
+        <div><strong>Kurikulum Terdeteksi:</strong> <span id="info-kurikulum-count">0 kurikulum</span></div>
+        <div><strong>Mata Kuliah Terdeteksi:</strong> <span id="info-mk-count">0 mata kuliah</span></div>
+        <div><strong>CPL Terdeteksi:</strong> <span id="info-cpl-count">0 CPL</span></div>
+      </div>
+      <button id="btn-refresh-manifest" class="btn btn-sm btn-outline-maroon w-full mt-3">
+        <i class="fa-solid fa-arrows-rotate mr-1.5"></i>
+        Muat Ulang Data dari Halaman
+      </button>
+    </div>
+  </main>
+
+  <!-- TAB 3: LOG AKTIVITAS -->
+  <main id="tab-logs" class="tab-content">
+    <div class="card">
+      <div class="card-header flex justify-between items-center mb-2">
+        <h2 class="card-title">Riwayat Eksekusi</h2>
+        <div class="flex gap-1.5">
+          <button id="btn-export-log" class="btn btn-xs btn-outline-maroon"><i class="fa-solid fa-file-arrow-down mr-1"></i> CSV</button>
+          <button id="btn-clear-log" class="btn btn-xs btn-outline-danger"><i class="fa-solid fa-trash-can mr-1"></i> Hapus</button>
+        </div>
+      </div>
+      <div id="log-list" class="log-container">
+        <div class="text-xs text-slate-400 text-center py-6">Belum ada riwayat aktivitas.</div>
+      </div>
+    </div>
+  </main>
+
+  <!-- TAB 4: PENGEMBANG & INFORMASI APLIKASI -->
+  <main id="tab-developer" class="tab-content">
+    <!-- Profil Pengembang Card -->
+    <div class="card mb-3">
+      <div class="card-header flex justify-between items-center mb-3">
+        <h2 class="card-title">Profil Pengembang</h2>
+        <span class="badge badge-maroon"><i class="fa-solid fa-graduation-cap mr-1"></i>Laode Fardin</span>
+      </div>
+      <div class="dev-details-list mt-3">
+        <div class="dev-detail-row">
+          <span class="detail-label"><i class="fa-solid fa-building-columns text-maroon mr-1.5"></i>Program Studi</span>
+          <span class="detail-value">Pendidikan Teknologi Informasi</span>
+        </div>
+        <div class="dev-detail-row">
+          <span class="detail-label"><i class="fa-solid fa-graduation-cap text-maroon mr-1.5"></i>Fakultas</span>
+          <span class="detail-value">FKIP (Fakultas Keguruan dan Ilmu Pendidikan)</span>
+        </div>
+        <div class="dev-detail-row">
+          <span class="detail-label"><i class="fa-solid fa-landmark text-maroon mr-1.5"></i>Universitas</span>
+          <span class="detail-value">Universitas Sulawesi Barat</span>
+        </div>
+        <div class="dev-detail-row">
+          <span class="detail-label"><i class="fa-solid fa-envelope text-maroon mr-1.5"></i>Kontak</span>
+          <span class="detail-value text-maroon font-medium">laodemuhzulfardinsyah@unsulbar.ac.id</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Informasi Aplikasi Card -->
+    <div class="card mb-3">
+      <div class="card-header flex justify-between items-center mb-3">
+        <h2 class="card-title">Informasi Aplikasi</h2>
+        <span class="badge badge-maroon"><i class="fa-solid fa-shield-halved mr-1"></i>v1.2.0 (MV3)</span>
+      </div>
+
+      <p class="text-xs text-slate-600 mb-3 leading-relaxed">
+        <strong>MALAQBI CPMK Assistant</strong> adalah ekstensi browser Manifest V3 berbasis Side Panel untuk otomasi cerdas dan presisi dalam pengisian data Capaian Pembelajaran Mata Kuliah (CPMK) dan Sub-CPMK dari berkas kurikulum Excel ke portal kurikulum OBE MALAQBI Unsulbar.
+      </p>
+
+      <div class="spec-grid">
+        <div class="spec-card">
+          <div class="spec-title"><i class="fa-solid fa-puzzle-piece text-maroon mr-1"></i>Platform</div>
+          <div class="spec-val">Chrome Extension (MV3)</div>
+        </div>
+        <div class="spec-card">
+          <div class="spec-title"><i class="fa-solid fa-bullseye text-maroon mr-1"></i>Target Portal</div>
+          <div class="spec-val">malaqbi.unsulbar.ac.id</div>
+        </div>
+        <div class="spec-card">
+          <div class="spec-title"><i class="fa-solid fa-file-excel text-maroon mr-1"></i>Parser File</div>
+          <div class="spec-val">SheetJS v0.18.5 (XLSX, CSV)</div>
+        </div>
+        <div class="spec-card">
+          <div class="spec-title"><i class="fa-solid fa-brain text-maroon mr-1"></i>Dukungan AI</div>
+          <div class="spec-val">Gemini 3.5 / 3.8 &amp; GPT-4o Mini</div>
+        </div>
+        <div class="spec-card">
+          <div class="spec-title"><i class="fa-solid fa-lock text-maroon mr-1"></i>Keamanan</div>
+          <div class="spec-val">Anti-Intip &amp; Anti-Copy</div>
+        </div>
+        <div class="spec-card">
+          <div class="spec-title"><i class="fa-solid fa-kit-medical text-maroon mr-1"></i>Fitur Spesial</div>
+          <div class="spec-val">Auto-Skip &amp; Auto-Healing</div>
+        </div>
+      </div>
+
+      <div class="mt-3 p-2.5 bg-slate-50 border border-slate-200 rounded-md">
+        <div class="flex items-start gap-2">
+          <i class="fa-solid fa-circle-info text-maroon mt-0.5 text-xs flex-shrink-0"></i>
+          <p class="text-[11px] text-slate-600 leading-normal">
+            Dikembangkan oleh Laode Fardin untuk efisiensi digitalisasi kurikulum OBE di lingkungan Fakultas Keguruan dan Ilmu Pendidikan Universitas Sulawesi Barat.
+          </p>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- Notifications Toast -->
+  <div id="toast" class="toast" style="display: none;"></div>
+
+  <!-- Scripts -->
+  <script src="lib/xlsx.full.min.js"></script>
+  <script src="lib/ai_service.js"></script>
+  <script src="lib/matcher.js"></script>
+  <script src="sidepanel.js"></script>
+</body>
+</html>
