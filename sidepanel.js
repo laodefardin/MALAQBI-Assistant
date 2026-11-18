@@ -44,6 +44,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   const queuePercentText = document.getElementById('queue-percent-text');
   const btnStartQueue = document.getElementById('btn-start-queue');
   const btnRetryFailed = document.getElementById('btn-retry-failed');
+  const btnStartFresh = document.getElementById('btn-start-fresh');
   const btnPauseQueue = document.getElementById('btn-pause-queue');
   const btnStopQueue = document.getElementById('btn-stop-queue');
   const inputDelay = document.getElementById('input-delay');
@@ -856,6 +857,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (btnRetryFailed) {
       btnRetryFailed.style.display = (!isRunning && failed > 0) ? 'inline-flex' : 'none';
     }
+
+    // Tampilkan tombol Mulai Baru hanya jika ada histori (sukses/dilewati/gagal) yang bisa dihapus
+    if (btnStartFresh) {
+      btnStartFresh.style.display = (!isRunning && processed > 0) ? 'inline-flex' : 'none';
+    }
   }
 
   /* ================= 7. KONTROL EKSEKUSI OTOMASI ================= */
@@ -878,6 +884,43 @@ document.addEventListener('DOMContentLoaded', async () => {
     } else {
       showToast('Tidak ada item yang berstatus gagal.');
     }
+  });
+
+  /**
+   * Hapus seluruh histori antrian (status, error, log) lalu reset ke kondisi awal.
+   * Dipakai oleh tombol "Mulai Baru".
+   */
+  async function resetQueueHistory() {
+    currentQueue.forEach(q => {
+      q.status = 'pending';
+      delete q.errorMessage;
+    });
+    activityLogs = [];
+    if (logList) {
+      logList.innerHTML = '<div class="text-xs text-slate-400 text-center py-6">Log telah dibersihkan.</div>';
+    }
+    await chrome.storage.local.set({
+      malaqbi_queue: currentQueue,
+      malaqbi_queue_index: 0,
+      malaqbi_is_running: false
+    });
+    updateStats();
+    renderQueueTable();
+  }
+
+  btnStartFresh?.addEventListener('click', async () => {
+    if (currentQueue.length === 0) {
+      showToast('Belum ada antrian yang disiapkan.');
+      return;
+    }
+    if (isRunning) {
+      showToast('Hentikan antrian yang sedang berjalan terlebih dahulu.');
+      return;
+    }
+    await resetQueueHistory();
+    addLog(`Histori dihapus. ${currentQueue.length} data CPMK disiapkan untuk putaran baru.`, 'info');
+    showToast('Histori lama dihapus. Memulai putaran baru...');
+    btnStartQueue?.click();
   });
 
   btnStartQueue?.addEventListener('click', async () => {

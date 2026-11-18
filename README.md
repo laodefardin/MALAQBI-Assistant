@@ -10,7 +10,7 @@ Ekstensi browser Google Chrome berbasis Manifest V3 dengan Side Panel dan kecerd
    - Berjalan secara antrian otomatis (`queue`).
    - Mengisi formulir pada `/admin/cpmk/create` lalu otomatis mengirim form (klik *Simpan CPMK*).
    - Mendeteksi redirect kembali ke halaman `/admin/cpmk`, mengeklik tombol *+ Tambah CPMK*, dan melanjutkan baris antrian berikutnya secara persisten via `chrome.storage.local`.
-   - Tombol kontrol fleksibel: **Mulai**, **Jeda (Pause)**, dan **Stop / Reset**.
+   - Tombol kontrol fleksibel: **Mulai**, **Jeda (Pause)**, **Stop / Reset**, dan **Mulai Baru** (`fa-arrow-rotate-left`) yang menghapus seluruh histori antrian (status sukses/dilewati/gagal beserta log) lalu memulai putaran dari nol.
 
 2. **Deteksi Kolom & Deduplikasi Excel Pintar:**
    - Membaca file `.xlsx`, `.xls`, dan `.csv` langsung di sisi klien menggunakan SheetJS (`xlsx.full.min.js`).
@@ -113,7 +113,7 @@ malaqbi-cpmk-assistant/
 
 ## Cakupan Automated Tests
 
-Ekstensi dilengkapi rangkaian pengujian unit dan integrasi otomatis (`test-extension.js`) dengan **137 assertions (100% Pass)**:
+Ekstensi dilengkapi rangkaian pengujian unit dan integrasi otomatis (`test-extension.js`) dengan **145 assertions (100% Pass)**:
 1. Pembacaan Excel 3 Sheet & baris data riil.
 2. Deteksi header baris ke-4 dan pemetaan kolom.
 3. Ekstraksi 336 baris & deduplikasi tepat ke 168 CPMK unik.
@@ -130,3 +130,4 @@ Ekstensi dilengkapi rangkaian pengujian unit dan integrasi otomatis (`test-exten
 14. Tab Pengembang & Informasi Aplikasi (Profil Laode Fardin, PTI FKIP Unsulbar, dan spesifikasi arsitektur ekstensi).
 15. Dukungan Google Interactions API (`/v1beta/interactions`) & ekstraksi struktur steps/output_text.
 16. Multi-Model Google Gemini aktif (`gemini-3.5-flash-lite`, `gemini-3.8-flash`, `gemini-3.6-flash`, `gemini-4-argon`, manual kustom), auto-migrasi model legacy yang telah dinonaktifkan Google, serta auto-failover cerdas saat lonjakan antrean/overload (*high demand* / 503 / 429).
+17. Tombol **Mulai Baru**: pembersihan histori status + log antrian, reset counter ke nol, dan verifikasi logika pencocokan matcher (fallback opsi sintetis bila dump HTML portal tidak tersedia).

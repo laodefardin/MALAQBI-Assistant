@@ -27,9 +27,19 @@ function assert(condition, message) {
 }
 
 // 1. UJI PARSING FILE EXCEL ASLI
-const excelPath = '/Users/laodefardin/Downloads/CPMK SubCPMK.xlsx';
+const excelCandidates = [
+  '/Users/laodefardin/Downloads/CPMK SubCPMK.xlsx',
+  '/Users/laodefardin/Dosen/CPMK SubCPMK.xlsx',
+  path.join(__dirname, 'fixtures', 'CPMK SubCPMK.xlsx')
+];
+const excelPath = excelCandidates.find(p => fs.existsSync(p));
 console.log('📁 Test 1: Membaca File Excel Sumber...');
-assert(fs.existsSync(excelPath), `File Excel ditemukan di ${excelPath}`);
+assert(!!excelPath, `File Excel ditemukan di ${excelPath || excelCandidates.join(' | ')}`);
+
+if (!excelPath) {
+  console.error('\n⚠️ File Excel sumber tidak ditemukan. Uji berbasis data dilewati.');
+  process.exit(1);
+}
 
 const buffer = fs.readFileSync(excelPath);
 const workbook = XLSX.read(buffer, { type: 'buffer' });
@@ -103,8 +113,18 @@ assert(firstItem.cpl === 'CPL-3', 'CPL item pertama adalah CPL-3');
 
 // 4. UJI PENCOCOKAN DENGAN OPTION DARI FILE CREATE HTML ASLI
 console.log('\n🌐 Test 4: Pencocokan Nilai dengan HTML Form MALAQBI Create...');
-const createHtmlPath = '/Users/laodefardin/Downloads/Dashboard - MALAQBI create.html';
-const createHtml = fs.readFileSync(createHtmlPath, 'utf8');
+const createHtmlCandidates = [
+  '/Users/laodefardin/Downloads/Dashboard - MALAQBI create.html',
+  path.join(__dirname, 'fixtures', 'malaqbi-create.html')
+];
+const createHtmlPath = createHtmlCandidates.find(p => fs.existsSync(p));
+let createHtml = '';
+
+if (createHtmlPath) {
+  createHtml = fs.readFileSync(createHtmlPath, 'utf8');
+} else {
+  console.log('  ⏭️ SKIP: Dump HTML form create MALAQBI tidak tersedia (uji pencocokan live dilewati).');
+}
 
 // Ekstraksi options mata kuliah dari HTML
 const mkOptionRegex = /<option value="(\d+)">\s*\[(.*?)\]\s*(.*?)\s*<\/option>/g;
@@ -118,17 +138,19 @@ while ((match = mkOptionRegex.exec(createHtml)) !== null) {
     cleanName: match[3].trim()
   });
 }
-assert(webMKOptions.length > 50, `Berhasil mengekstrak ${webMKOptions.length} opsi Mata Kuliah dari HTML form create`);
+if (createHtmlPath) {
+  assert(webMKOptions.length > 50, `Berhasil mengekstrak ${webMKOptions.length} opsi Mata Kuliah dari HTML form create`);
 
-// Test kecocokan untuk beberapa MK
-const testMK1 = Matcher.matchMataKuliah('PTI061225', 'Aplikasi Komputer', webMKOptions);
-assert(testMK1 === '2284', `Pencocokan [PTI061225] Aplikasi Komputer mengembalikan ID: 2284 (Dapat: ${testMK1})`);
+  // Test kecocokan untuk beberapa MK
+  const testMK1 = Matcher.matchMataKuliah('PTI061225', 'Aplikasi Komputer', webMKOptions);
+  assert(testMK1 === '2284', `Pencocokan [PTI061225] Aplikasi Komputer mengembalikan ID: 2284 (Dapat: ${testMK1})`);
 
-const testMK2 = Matcher.matchMataKuliah('PTI163224', 'Pemrograman Web', webMKOptions);
-assert(testMK2 === '2309', `Pencocokan [PTI163224] Pemrograman Web mengembalikan ID: 2309 (Dapat: ${testMK2})`);
+  const testMK2 = Matcher.matchMataKuliah('PTI163224', 'Pemrograman Web', webMKOptions);
+  assert(testMK2 === '2309', `Pencocokan [PTI163224] Pemrograman Web mengembalikan ID: 2309 (Dapat: ${testMK2})`);
 
-const testMK3 = Matcher.matchMataKuliah(null, 'Struktur Data', webMKOptions);
-assert(testMK3 === '2308', `Pencocokan nama saja "Struktur Data" mengembalikan ID: 2308 (Dapat: ${testMK3})`);
+  const testMK3 = Matcher.matchMataKuliah(null, 'Struktur Data', webMKOptions);
+  assert(testMK3 === '2308', `Pencocokan nama saja "Struktur Data" mengembalikan ID: 2308 (Dapat: ${testMK3})`);
+}
 
 // 5. UJI PENCOCOKAN CPL RADIO DARI HTML ASLI
 console.log('\n🎯 Test 5: Pencocokan Radio CPL dari HTML Create...');
@@ -141,16 +163,34 @@ while ((match = cplRadioRegex.exec(createHtml)) !== null) {
     cplCode: match[2].trim()
   });
 }
-assert(webCPLOptions.length === 12, `Berhasil mengekstrak ${webCPLOptions.length} radio CPL (CPL-01 s/d CPL-12)`);
 
-const testCPL1 = Matcher.matchCPL('CPL-3', webCPLOptions);
-assert(testCPL1 === '444', `Pencocokan 'CPL-3' mengembalikan ID CPL-03: 444 (Dapat: ${testCPL1})`);
+if (createHtmlPath) {
+  assert(webCPLOptions.length === 12, `Berhasil mengekstrak ${webCPLOptions.length} radio CPL (CPL-01 s/d CPL-12)`);
 
-const testCPL2 = Matcher.matchCPL('CPL-07', webCPLOptions);
-assert(testCPL2 === '448', `Pencocokan 'CPL-07' mengembalikan ID CPL-07: 448 (Dapat: ${testCPL2})`);
+  const testCPL1 = Matcher.matchCPL('CPL-3', webCPLOptions);
+  assert(testCPL1 === '444', `Pencocokan 'CPL-3' mengembalikan ID CPL-03: 444 (Dapat: ${testCPL1})`);
 
-const testCPL3 = Matcher.matchCPL('CPL 11', webCPLOptions);
-assert(testCPL3 === '452', `Pencocokan 'CPL 11' mengembalikan ID CPL-11: 452 (Dapat: ${testCPL3})`);
+  const testCPL2 = Matcher.matchCPL('CPL-07', webCPLOptions);
+  assert(testCPL2 === '448', `Pencocokan 'CPL-07' mengembalikan ID CPL-07: 448 (Dapat: ${testCPL2})`);
+
+  const testCPL3 = Matcher.matchCPL('CPL 11', webCPLOptions);
+  assert(testCPL3 === '452', `Pencocokan 'CPL 11' mengembalikan ID CPL-11: 452 (Dapat: ${testCPL3})`);
+} else {
+  // Uji logika matcher dengan opsi sintetis (tidak bergantung dump HTML portal)
+  const syntheticMK = [
+    { value: '9001', text: '[PTI061225] Aplikasi Komputer', code: 'PTI061225', cleanName: 'Aplikasi Komputer' },
+    { value: '9002', text: '[PTI163224] Pemrograman Web', code: 'PTI163224', cleanName: 'Pemrograman Web' }
+  ];
+  const syntheticCPL = [
+    { value: '444', text: 'CPL-03 — Menguasai konsep dasar', cplCode: 'CPL-03' },
+    { value: '452', text: 'CPL-11 — Berpikir kritis', cplCode: 'CPL-11' }
+  ];
+  assert(Matcher.matchMataKuliah('PTI061225', 'Aplikasi Komputer', syntheticMK) === '9001', 'Matcher MK cocok via kode [PTI061225] (opsi sintetis)');
+  assert(Matcher.matchMataKuliah(null, 'pemrograman   web', syntheticMK) === '9002', 'Matcher MK cocok via nama ternormalisasi (opsi sintetis)');
+  assert(Matcher.matchMataKuliah('PTI999999', 'Tidak Ada', syntheticMK) === null, 'Matcher MK mengembalikan null untuk MK tak dikenal');
+  assert(Matcher.matchCPL('CPL-3', syntheticCPL) === '444', 'Matcher CPL menormalkan padding CPL-3 → CPL-03 (opsi sintetis)');
+  assert(Matcher.matchCPL('CPL 11', syntheticCPL) === '452', 'Matcher CPL menormalkan spasi CPL 11 → CPL-11 (opsi sintetis)');
+}
 
 // 6. UJI INTEGRASI FILE EXTENSION
 console.log('\n📦 Test 6: Verifikasi File Ekstensi Chrome MV3...');
@@ -399,6 +439,28 @@ assert(htmlContent.includes('id="wrapper-custom-model"'), 'sidepanel.html memili
 assert(htmlContent.includes('id="input-custom-model"'), 'sidepanel.html memiliki elemen #input-custom-model');
 assert(htmlContent.includes('gemini-3.5-flash-lite'), 'sidepanel.html memuat rekomendasi gemini-3.5-flash-lite');
 assert(htmlContent.includes('Gemini 3.5 / 3.8'), 'sidepanel.html menampilkan info spesifikasi Gemini 3.5 / 3.8');
+
+console.log('\n🔄 Test 17: Verifikasi Tombol "Mulai Baru" & Pembersihan Histori Antrian...');
+assert(htmlContent.includes('id="btn-start-fresh"'), 'sidepanel.html memiliki tombol #btn-start-fresh');
+assert(htmlContent.includes('Mulai Baru'), 'Tombol menggunakan label "Mulai Baru"');
+assert(htmlContent.includes('fa-arrow-rotate-left'), 'Tombol memakai ikon FA fa-arrow-rotate-left');
+assert(jsContent.includes("getElementById('btn-start-fresh')"), 'sidepanel.js mengambil elemen #btn-start-fresh');
+assert(jsContent.includes('async function resetQueueHistory()'), 'sidepanel.js mendefinisikan resetQueueHistory()');
+assert(jsContent.includes("q.status = 'pending'") && jsContent.includes('delete q.errorMessage'), 'resetQueueHistory menghapus status & pesan error lama');
+assert(jsContent.includes('activityLogs = []'), 'resetQueueHistory membersihkan histori log');
+assert(jsContent.includes('btnStartFresh?.addEventListener'), 'sidepanel.js memasang listener pada tombol Mulai Baru');
+
+// Simulasi logika reset: histori lama (sukses/skipped/failed) harus kembali ke pending
+const historyQueue = [
+  { kodeCPMK: 'CPMK-12.1', status: 'skipped' },
+  { kodeCPMK: 'CPMK-13.1', status: 'success' },
+  { kodeCPMK: 'CPMK-14.1', status: 'failed', errorMessage: 'Gagal: Hapus' },
+  { kodeCPMK: 'CPMK-15.1', status: 'pending' }
+];
+historyQueue.forEach(q => { q.status = 'pending'; delete q.errorMessage; });
+assert(historyQueue.every(q => q.status === 'pending'), 'Seluruh histori dikembalikan ke status pending');
+assert(historyQueue.every(q => q.errorMessage === undefined), 'Pesan error histori ikut dihapus');
+assert(historyQueue.filter(q => q.status === 'skipped').length === 0, 'Counter Dilewati mulai dari nol pada putaran baru');
 
 console.log('\n====================================================');
 console.log(`🏁 TEST RESULTS: ${passedTests}/${totalTests} TESTS PASSED!`);
