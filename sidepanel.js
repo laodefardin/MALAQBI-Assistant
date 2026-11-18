@@ -1035,8 +1035,8 @@ document.addEventListener('DOMContentLoaded', async () => {
   });
 
   btnResetQueue?.addEventListener('click', async () => {
-    if (currentQueue.length === 0) {
-      showToast('Belum ada antrian yang bisa direset.');
+    if (currentQueue.length === 0 && !currentWorkbook) {
+      showToast('Tidak ada antrian yang bisa direset.');
       return;
     }
     if (isRunning) {
@@ -1045,9 +1045,22 @@ document.addEventListener('DOMContentLoaded', async () => {
       btnPauseQueue.style.display = 'none';
       btnStopQueue.style.display = 'none';
     }
-    await resetQueueHistory();
-    showToast(`Antrian direset. ${currentQueue.length} data kembali pending.`);
-    addLog(`Reset antrian: histori dibersihkan, ${currentQueue.length} data kembali pending.`, 'warn');
+
+    resetExcelState();                  // kosongkan antrian + kembali ke tampilan unggah
+    activityLogs = [];
+    if (logList) {
+      logList.innerHTML = '<div class="text-xs text-slate-400 text-center py-6">Log telah dibersihkan.</div>';
+    }
+    await chrome.storage.local.set({
+      malaqbi_queue: [],
+      malaqbi_queue_index: 0,
+      malaqbi_is_running: false
+    });
+
+    updateStats();
+    renderQueueTable();
+    showToast('Antrian direset. Silakan unggah file Excel baru.');
+    addLog('Reset antrian: seluruh daftar dan histori dihapus.', 'warn');
   });
 
   /* ================= 8. LISTENER BROADCAST DARI CONTENT SCRIPT ================= */

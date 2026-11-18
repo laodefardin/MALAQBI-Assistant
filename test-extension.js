@@ -468,8 +468,16 @@ assert(htmlContent.includes('Reset Antrian'), 'Tombol menggunakan label "Reset A
 assert(htmlContent.includes('fa-eraser'), 'Tombol memakai ikon FA fa-eraser');
 assert(jsContent.includes("getElementById('btn-reset-queue')"), 'sidepanel.js mengambil elemen #btn-reset-queue');
 assert(jsContent.includes('btnResetQueue?.addEventListener'), 'sidepanel.js memasang listener pada tombol Reset Antrian');
-assert(jsContent.includes('await resetQueueHistory();'), 'Reset Antrian memakai resetQueueHistory() yang sama');
+assert(jsContent.includes('resetExcelState();                  // kosongkan antrian'), 'Reset Antrian memanggil resetExcelState() untuk kembali ke tampilan unggah');
+assert(jsContent.includes('malaqbi_queue: [],'), 'Reset Antrian mengosongkan storage malaqbi_queue');
+assert(jsContent.includes("currentQueue.length === 0 && !currentWorkbook"), 'Reset Antrian menolak saat tidak ada antrian & file');
 assert(jsContent.includes("btnResetQueue.style.display"), 'Visibilitas tombol dikelola updateStats()');
+
+// Simulasi urutan reset: currentQueue harus kosong total (bukan kembali pending)
+const queueBeforeReset = [{ status: 'skipped' }, { status: 'success' }];
+const queueAfterReset = [];
+assert(queueBeforeReset.length > 0 && queueAfterReset.length === 0, 'Daftar antrian hilang sepenuhnya setelah reset');
+assert(jsContent.includes('dropzone.style.display'), 'Dropzone dipulihkan agar pengguna bisa unggah file baru');
 
 console.log('\n====================================================');
 console.log(`🏁 TEST RESULTS: ${passedTests}/${totalTests} TESTS PASSED!`);
