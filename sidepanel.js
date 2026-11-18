@@ -45,6 +45,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   const btnStartQueue = document.getElementById('btn-start-queue');
   const btnRetryFailed = document.getElementById('btn-retry-failed');
   const btnStartFresh = document.getElementById('btn-start-fresh');
+  const btnResetQueue = document.getElementById('btn-reset-queue');
   const btnPauseQueue = document.getElementById('btn-pause-queue');
   const btnStopQueue = document.getElementById('btn-stop-queue');
   const inputDelay = document.getElementById('input-delay');
@@ -862,6 +863,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (btnStartFresh) {
       btnStartFresh.style.display = (!isRunning && processed > 0) ? 'inline-flex' : 'none';
     }
+
+    // Tombol Reset Antrian selalu tersedia selama ada antrian dan otomasi tidak berjalan
+    if (btnResetQueue) {
+      btnResetQueue.style.display = (!isRunning && currentQueue.length > 0) ? 'inline-flex' : 'none';
+    }
   }
 
   /* ================= 7. KONTROL EKSEKUSI OTOMASI ================= */
@@ -1026,6 +1032,22 @@ document.addEventListener('DOMContentLoaded', async () => {
     showToast('Otomasi dihentikan.');
     addLog('Otomasi dihentikan.', 'error');
     updateStats();
+  });
+
+  btnResetQueue?.addEventListener('click', async () => {
+    if (currentQueue.length === 0) {
+      showToast('Belum ada antrian yang bisa direset.');
+      return;
+    }
+    if (isRunning) {
+      isRunning = false;
+      btnStartQueue.style.display = 'inline-flex';
+      btnPauseQueue.style.display = 'none';
+      btnStopQueue.style.display = 'none';
+    }
+    await resetQueueHistory();
+    showToast(`Antrian direset. ${currentQueue.length} data kembali pending.`);
+    addLog(`Reset antrian: histori dibersihkan, ${currentQueue.length} data kembali pending.`, 'warn');
   });
 
   /* ================= 8. LISTENER BROADCAST DARI CONTENT SCRIPT ================= */

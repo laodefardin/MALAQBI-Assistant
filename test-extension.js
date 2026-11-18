@@ -462,6 +462,15 @@ assert(historyQueue.every(q => q.status === 'pending'), 'Seluruh histori dikemba
 assert(historyQueue.every(q => q.errorMessage === undefined), 'Pesan error histori ikut dihapus');
 assert(historyQueue.filter(q => q.status === 'skipped').length === 0, 'Counter Dilewati mulai dari nol pada putaran baru');
 
+console.log('\n🧽 Test 18: Verifikasi Tombol "Reset Antrian"...');
+assert(htmlContent.includes('id="btn-reset-queue"'), 'sidepanel.html memiliki tombol #btn-reset-queue');
+assert(htmlContent.includes('Reset Antrian'), 'Tombol menggunakan label "Reset Antrian"');
+assert(htmlContent.includes('fa-eraser'), 'Tombol memakai ikon FA fa-eraser');
+assert(jsContent.includes("getElementById('btn-reset-queue')"), 'sidepanel.js mengambil elemen #btn-reset-queue');
+assert(jsContent.includes('btnResetQueue?.addEventListener'), 'sidepanel.js memasang listener pada tombol Reset Antrian');
+assert(jsContent.includes('await resetQueueHistory();'), 'Reset Antrian memakai resetQueueHistory() yang sama');
+assert(jsContent.includes("btnResetQueue.style.display"), 'Visibilitas tombol dikelola updateStats()');
+
 console.log('\n====================================================');
 console.log(`🏁 TEST RESULTS: ${passedTests}/${totalTests} TESTS PASSED!`);
 if (passedTests === totalTests) {
