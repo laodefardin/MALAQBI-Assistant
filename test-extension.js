@@ -479,6 +479,57 @@ const queueAfterReset = [];
 assert(queueBeforeReset.length > 0 && queueAfterReset.length === 0, 'Daftar antrian hilang sepenuhnya setelah reset');
 assert(jsContent.includes('dropzone.style.display'), 'Dropzone dipulihkan agar pengguna bisa unggah file baru');
 
+console.log('\n🧩 Test 19: Modul Sub-CPMK — Deteksi Kolom & Pembentukan Antrian...');
+require('./lib/subcpmk.js');
+const SubCPMK = globalThis.SubCPMK;
+
+const subHeaders = ['Kode MK', 'Nama Mata Kuliah', 'Kode CPMK', 'Kode Sub-CPMK', 'Deskripsi', 'Bobot (%)'];
+const subGuess = SubCPMK.detectColumnsHeuristic(subHeaders);
+assert(subGuess.kode_mk === 'Kode MK', 'Heuristik mendeteksi kolom Kode MK');
+assert(subGuess.kode_cpmk === 'Kode CPMK', 'Heuristik mendeteksi kolom Kode CPMK');
+assert(subGuess.kode_sub === 'Kode Sub-CPMK', 'Heuristik mendeteksi kolom Kode Sub-CPMK');
+assert(subGuess.bobot === 'Bobot (%)', 'Heuristik mendeteksi kolom Bobot');
+assert(SubCPMK.normalizeBobot('20,5') === '20.5', 'Normalisasi bobot desimal koma → titik');
+
+const subRows = [
+  { 'Kode MK': 'FIP064425', 'Nama Mata Kuliah': 'PLP', 'Kode CPMK': 'CPMK-56.1', 'Kode Sub-CPMK': 'SC-2', 'Deskripsi': 'Sub kedua', 'Bobot (%)': '30' },
+  { 'Kode MK': 'MAPIA01', 'Nama Mata Kuliah': 'Literasi', 'Kode CPMK': 'CPMK-57.1', 'Kode Sub-CPMK': 'SC-9', 'Deskripsi': 'Sub MK lain', 'Bobot (%)': 25 },
+  { 'Kode MK': 'FIP064425', 'Nama Mata Kuliah': 'PLP', 'Kode CPMK': 'CPMK-56.1', 'Kode Sub-CPMK': 'SC-1', 'Deskripsi': 'Sub pertama', 'Bobot (%)': '20.5' },
+  { 'Kode MK': 'FIP064425', 'Nama Mata Kuliah': 'PLP', 'Kode CPMK': 'CPMK-56.1', 'Kode Sub-CPMK': 'SC-1', 'Deskripsi': 'Duplikat', 'Bobot (%)': '20.5' },
+  { 'Kode MK': '', 'Nama Mata Kuliah': 'Tanpa Kode', 'Kode CPMK': 'CPMK-58.1', 'Kode Sub-CPMK': 'SC-3', 'Deskripsi': 'Invalid', 'Bobot (%)': '10' }
+];
+
+const subBuilt = SubCPMK.buildQueue(subRows, subGuess, { dedupe: true });
+assert(subBuilt.items.length === 3, `Deduplikasi menyisakan 3 Sub-CPMK unik (hasil: ${subBuilt.items.length})`);
+assert(subBuilt.invalid.length === 1, 'Baris tanpa Kode MK masuk daftar tidak valid');
+assert(subBuilt.items[0].kodeMK === 'FIP064425' && subBuilt.items[0].kode === 'SC-2', 'Urutan mengikuti kemunculan MK pertama di file');
+assert(subBuilt.items[1].kode === 'SC-1', 'Sub-CPMK dalam CPMK yang sama tetap berurutan sesuai file');
+assert(subBuilt.items[2].kodeMK === 'MAPIA01', 'MK berikutnya diproses setelah MK pertama selesai');
+assert(subBuilt.items[2].bobot === '25', 'Bobot numerik dikonversi ke string rapi');
+assert(subBuilt.items.every(i => i.status === 'pending'), 'Semua item baru berstatus pending');
+
+console.log('\n🗂️ Test 20: Integrasi Tab Sub-CPMK (UI + Content Script)...');
+assert(htmlContent.includes('data-tab="tab-sub"'), 'sidepanel.html punya tombol tab Sub CPMK');
+assert(htmlContent.includes('id="tab-sub"'), 'sidepanel.html punya panel #tab-sub');
+assert(htmlContent.includes('id="sc-dropzone"') && htmlContent.includes('id="sc-file-input"'), 'Panel Sub-CPMK punya dropzone & input file sendiri');
+assert(htmlContent.includes('id="sc-map-kodemk"'), 'Ada pemetaan kolom Kode MK');
+assert(htmlContent.includes('id="sc-map-kodecpmk"'), 'Ada pemetaan kolom Kode CPMK');
+assert(htmlContent.includes('id="sc-map-kodesub"'), 'Ada pemetaan kolom Kode Sub-CPMK');
+assert(htmlContent.includes('id="sc-btn-start"'), 'Ada tombol Mulai Sub-CPMK');
+assert(htmlContent.includes('lib/subcpmk.js'), 'sidepanel.html memuat lib/subcpmk.js');
+assert(jsContent.includes('SubCPMK.buildQueue'), 'sidepanel.js memakai SubCPMK.buildQueue()');
+assert(jsContent.includes("malaqbi_sub_running: true"), 'Mulai Sub-CPMK menandai malaqbi_sub_running di storage');
+assert(jsContent.includes('admin/mata-kuliah?search='), 'Otomasi membuka daftar MK dengan parameter pencarian');
+
+const contentJs = fs.readFileSync(path.join(__dirname, 'content.js'), 'utf8');
+assert(contentJs.includes('function detectSubPage()'), 'content.js mendeteksi halaman Sub-CPMK');
+assert(/admin\\?\/mata-kuliah/.test(contentJs) || contentJs.includes('/admin/mata-kuliah'), 'content.js mengenali rute mata-kuliah');
+assert(contentJs.includes('/sub-cpmk/create'), 'content.js mengenali rute form Sub-CPMK');
+assert(contentJs.includes('input[name="kode"]') && contentJs.includes('textarea[name="deskripsi"]') && contentJs.includes('input[name="bobot"]'), 'content.js mengisi kode, deskripsi, dan bobot');
+assert(contentJs.includes('SUB_QUEUE_STATUS_UPDATE') && contentJs.includes('SUB_QUEUE_FINISHED'), 'content.js mengirim status antrian Sub-CPMK ke side panel');
+assert(contentJs.includes('function findSubCpmkCard'), 'content.js mencari kartu CPMK berdasarkan kode');
+assert(contentJs.includes('function subCodeExists'), 'content.js mendeteksi Sub-CPMK yang sudah ada (anti-duplikasi)');
+
 console.log('\n====================================================');
 console.log(`🏁 TEST RESULTS: ${passedTests}/${totalTests} TESTS PASSED!`);
 if (passedTests === totalTests) {

@@ -38,6 +38,12 @@ Ekstensi browser Google Chrome berbasis Manifest V3 dengan Side Panel dan kecerd
    - Menggunakan estetika ODS berbalut **Merah Marun Unsulbar (`#8f2430`)**, efek gradien `var(--tw-gradient-to-position)`, slate cards (`#f8fafc` / `#0f172a`), badge status hierarki, dan rounded corners (12px).
    - Standardisasi ikon antarmuka menggunakan **Font Awesome 6 Free** lokal (`lib/font-awesome.min.css` & `webfonts/`) serta aset ikon ekstensi maroon resolusi multi-tier (16px, 48px, 128px) tanpa emoji, bebas *slop*, dan teruji *zoom-proof*.
 
+6. **Modul Sub-CPMK (Menu Sejajar Antrian CPMK):**
+   - Tab **Sub CPMK** dengan unggah Excel sendiri: kolom **Kode MK**, **Kode CPMK**, **Kode Sub-CPMK**, **Deskripsi**, dan **Bobot (%)**.
+   - Alur otomasi otomatis: buka `Mata Kuliah` → cari MK yang kolom CPMK-nya **> 0** (MK dengan CPMK `0` dilewati) → klik **Detail** → temukan kartu CPMK sesuai kode → klik **+ Tambah Sub-CPMK** → isi Kode, Deskripsi, Bobot → **Simpan** → lanjut Sub-CPMK berikutnya, lalu CPMK berikutnya, lalu mata kuliah berikutnya.
+   - Anti-duplikasi: Sub-CPMK yang kodenya sudah tampil pada kartu CPMK otomatis ditandai **Dilewati**.
+   - Kontrol **Mulai / Jeda / Stop / Reset** serta tabel pratinjau status per baris.
+
 ---
 
 ## 📂 Struktur Berkas
@@ -54,6 +60,7 @@ malaqbi-cpmk-assistant/
 ├── lib/
 │   ├── ai_service.js         # Handler API Gemini & OpenAI
 │   ├── matcher.js            # Algoritma heuristik, normalisasi & deduplikasi
+│   ├── subcpmk.js            # Parser & pembentuk antrian Sub-CPMK (MK → CPMK)
 │   ├── xlsx.full.min.js      # Library SheetJS parser Excel offline
 │   └── font-awesome.min.css  # Webfont stylesheet Font Awesome 6
 ├── webfonts/                 # File font Font Awesome offline (.woff2)
@@ -106,14 +113,18 @@ malaqbi-cpmk-assistant/
    - Status terperinci menampilkan metrik: **Total**, **Antri**, **Sukses**, **Dilewati**, dan **Gagal**.
    - Jika terdapat item yang sempat terhenti karena kegagalan atau false error, tombol **"Ulangi Gagal"** (`fa-rotate-right`) akan muncul otomatis untuk mengulang item tersebut dalam sekali klik.
    - Anda dapat menjeda (**Jeda**) atau menghentikan (**Stop**) kapan saja.
-7. **Unduh Riwayat:**
+8. **Modul Sub-CPMK (opsional):**
+   - Buka tab **Sub CPMK** (di samping Antrian CPMK).
+   - Unggah Excel berisi kolom `Kode MK`, `Kode CPMK`, `Kode Sub-CPMK`, `Deskripsi`, `Bobot (%)`, lalu periksa pemetaan kolom yang terdeteksi otomatis.
+   - Klik **"Mulai Sub-CPMK"**. Ekstensi akan membuka daftar Mata Kuliah, melewati MK yang kolom CPMK-nya `0`, masuk ke detail MK, membuka **+ Tambah Sub-CPMK** pada CPMK yang sesuai, mengisi form, menyimpan, lalu lanjut ke Sub-CPMK/CPMK/MK berikutnya otomatis.
+9. **Unduh Riwayat:**
    - Buka tab **Log** untuk melihat catatan proses atau klik **"CSV"** untuk mengekspor riwayat eksekusi.
 
 ---
 
 ## Cakupan Automated Tests
 
-Ekstensi dilengkapi rangkaian pengujian unit dan integrasi otomatis (`test-extension.js`) dengan **145 assertions (100% Pass)**:
+Ekstensi dilengkapi rangkaian pengujian unit dan integrasi otomatis (`test-extension.js`) dengan **186 assertions (100% Pass)**:
 1. Pembacaan Excel 3 Sheet & baris data riil.
 2. Deteksi header baris ke-4 dan pemetaan kolom.
 3. Ekstraksi 336 baris & deduplikasi tepat ke 168 CPMK unik.
@@ -131,3 +142,6 @@ Ekstensi dilengkapi rangkaian pengujian unit dan integrasi otomatis (`test-exten
 15. Dukungan Google Interactions API (`/v1beta/interactions`) & ekstraksi struktur steps/output_text.
 16. Multi-Model Google Gemini aktif (`gemini-3.5-flash-lite`, `gemini-3.8-flash`, `gemini-3.6-flash`, `gemini-4-argon`, manual kustom), auto-migrasi model legacy yang telah dinonaktifkan Google, serta auto-failover cerdas saat lonjakan antrean/overload (*high demand* / 503 / 429).
 17. Tombol **Mulai Baru**: pembersihan histori status + log antrian, reset counter ke nol, dan verifikasi logika pencocokan matcher (fallback opsi sintetis bila dump HTML portal tidak tersedia).
+18. Tombol **Reset Antrian**: pengosongan total daftar antrian, pemulihan dropzone, dan pembersihan `malaqbi_queue` di storage.
+19. Modul **Sub-CPMK**: heuristik kolom (Kode MK / Kode CPMK / Kode Sub-CPMK / Bobot), normalisasi bobot desimal, deduplikasi, dan pengurutan MK → CPMK → Sub-CPMK.
+20. Integrasi tab **Sub CPMK**: elemen UI, pemetaan kolom, penyimpanan `malaqbi_sub_*`, deteksi rute `mata-kuliah` & `/sub-cpmk/create`, pengisian form, dan anti-duplikasi di content script.

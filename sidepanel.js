@@ -1063,6 +1063,358 @@ document.addEventListener('DOMContentLoaded', async () => {
     addLog('Reset antrian: seluruh daftar dan histori dihapus.', 'warn');
   });
 
+  /* ================= 10. MODUL SUB-CPMK (MK → CPMK → Sub-CPMK) ================= */
+  const scDropzone = document.getElementById('sc-dropzone');
+  const scFileInput = document.getElementById('sc-file-input');
+  const scBtnBrowse = document.getElementById('sc-btn-browse');
+  const scFileInfoBar = document.getElementById('sc-file-info-bar');
+  const scFileName = document.getElementById('sc-file-name');
+  const scFileSize = document.getElementById('sc-file-size');
+  const scBtnRemoveFile = document.getElementById('sc-btn-remove-file');
+  const scSheetWrapper = document.getElementById('sc-sheet-wrapper');
+  const scSelectSheet = document.getElementById('sc-select-sheet');
+  const scMappingCard = document.getElementById('sc-mapping-card');
+  const scMapKodeMK = document.getElementById('sc-map-kodemk');
+  const scMapMK = document.getElementById('sc-map-mk');
+  const scMapKodeCPMK = document.getElementById('sc-map-kodecpmk');
+  const scMapKodeSub = document.getElementById('sc-map-kodesub');
+  const scMapDesc = document.getElementById('sc-map-desc');
+  const scMapBobot = document.getElementById('sc-map-bobot');
+  const scFilterMK = document.getElementById('sc-filter-mk');
+  const scControlsCard = document.getElementById('sc-controls-card');
+  const scStatTotal = document.getElementById('sc-stat-total');
+  const scStatPending = document.getElementById('sc-stat-pending');
+  const scStatSuccess = document.getElementById('sc-stat-success');
+  const scStatSkipped = document.getElementById('sc-stat-skipped');
+  const scStatFailed = document.getElementById('sc-stat-failed');
+  const scProgressBar = document.getElementById('sc-progress-bar');
+  const scStatusText = document.getElementById('sc-status-text');
+  const scPercentText = document.getElementById('sc-percent-text');
+  const scBtnStart = document.getElementById('sc-btn-start');
+  const scBtnReset = document.getElementById('sc-btn-reset');
+  const scBtnPause = document.getElementById('sc-btn-pause');
+  const scBtnStop = document.getElementById('sc-btn-stop');
+  const scInputDelay = document.getElementById('sc-input-delay');
+  const scPreviewCard = document.getElementById('sc-preview-card');
+  const scBadgeCount = document.getElementById('sc-badge-count');
+  const scTableBody = document.getElementById('sc-table-body');
+
+  let scWorkbook = null;
+  let scHeaders = [];
+  let scRows = [];
+  let scQueue = [];
+  let scRunning = false;
+  let scInvalidCount = 0;
+
+  const SC_STATUS_BADGE = {
+    skipped: '<span class="status-badge status-skipped">Dilewati</span>',
+    success: '<span class="status-badge status-success">Sukses</span>',
+    failed: '<span class="status-badge status-failed">Gagal</span>',
+    processing: '<span class="status-badge status-processing">Proses</span>',
+    pending: '<span class="status-badge status-pending">Antri</span>'
+  };
+
+  function scResetState() {
+    scWorkbook = null;
+    scHeaders = [];
+    scRows = [];
+    scQueue = [];
+    scInvalidCount = 0;
+    if (scFileInput) scFileInput.value = '';
+    scFileInfoBar.style.display = 'none';
+    scSheetWrapper.style.display = 'none';
+    scMappingCard.style.display = 'none';
+    scControlsCard.style.display = 'none';
+    scPreviewCard.style.display = 'none';
+    scDropzone.style.display = 'block';
+    scUpdateStats();
+    scRenderTable();
+  }
+
+  async function scHandleFile(file) {
+    const ext = (file.name.split('.').pop() || '').toLowerCase();
+    if (!['xlsx', 'xls', 'csv'].includes(ext)) {
+      showToast('Gunakan file Excel (.xlsx, .xls) atau CSV.');
+      return;
+    }
+
+    scFileName.textContent = file.name;
+    scFileSize.textContent = `(${(file.size / 1024).toFixed(1)} KB)`;
+    scDropzone.style.display = 'none';
+    scFileInfoBar.style.display = 'flex';
+    addLog(`[Sub-CPMK] Membaca file "${file.name}"...`, 'info');
+
+    try {
+      const buffer = await file.arrayBuffer();
+      scWorkbook = XLSX.read(buffer, { type: 'array' });
+
+      scSelectSheet.innerHTML = '';
+      scWorkbook.SheetNames.forEach(name => {
+        const opt = document.createElement('option');
+        opt.value = name;
+        opt.textContent = name;
+        scSelectSheet.appendChild(opt);
+      });
+      scSheetWrapper.style.display = 'block';
+
+      const preferred = scWorkbook.SheetNames.find(n => /sub|subcpmk/i.test(n)) || scWorkbook.SheetNames[0];
+      scSelectSheet.value = preferred;
+      scLoadSheet(preferred);
+    } catch (err) {
+      addLog(`[Sub-CPMK] Gagal membaca file: ${err.message}`, 'error');
+      showToast(`Gagal membaca Excel: ${err.message}`);
+      scResetState();
+    }
+  }
+
+  function scLoadSheet(sheetName) {
+    const sheet = scWorkbook?.Sheets?.[sheetName];
+    if (!sheet) return;
+
+    const matrix = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
+    if (!matrix.length) { showToast('Sheet kosong!'); return; }
+
+    let headerRowIdx = 0;
+    for (let r = 0; r < Math.min(10, matrix.length); r++) {
+      const row = matrix[r] || [];
+      const nonEmpty = row.filter(c => String(c || '').trim() !== '');
+      if (nonEmpty.length >= 3) {
+        const joined = row.map(c => String(c || '').toLowerCase()).join(' ');
+        if (joined.includes('sub') || joined.includes('cpmk') || joined.includes('mata kuliah')) {
+          headerRowIdx = r;
+          break;
+        }
+      }
+    }
+
+    scHeaders = matrix[headerRowIdx].map(h => String(h || '').trim()).filter(h => h.length > 0);
+
+    const dataRows = [];
+    for (let r = headerRowIdx + 1; r < matrix.length; r++) {
+      const vals = matrix[r];
+      if (!vals.some(v => v !== '' && v !== null && v !== undefined)) continue;
+      const obj = {};
+      scHeaders.forEach((h, i) => { obj[h] = vals[i] !== undefined ? vals[i] : ''; });
+      dataRows.push(obj);
+    }
+    scRows = dataRows;
+    addLog(`[Sub-CPMK] Sheet "${sheetName}": ${scHeaders.length} kolom, ${scRows.length} baris data.`, 'success');
+
+    [scMapKodeMK, scMapMK, scMapKodeCPMK, scMapKodeSub, scMapDesc, scMapBobot].forEach(sel => {
+      sel.innerHTML = '<option value="">-- Pilih Kolom --</option>';
+      scHeaders.forEach(h => {
+        const opt = document.createElement('option');
+        opt.value = h;
+        opt.textContent = h;
+        sel.appendChild(opt);
+      });
+    });
+
+    const guess = SubCPMK.detectColumnsHeuristic(scHeaders);
+    if (guess.kode_mk) scMapKodeMK.value = guess.kode_mk;
+    if (guess.mata_kuliah) scMapMK.value = guess.mata_kuliah;
+    if (guess.kode_cpmk) scMapKodeCPMK.value = guess.kode_cpmk;
+    if (guess.kode_sub) scMapKodeSub.value = guess.kode_sub;
+    if (guess.deskripsi) scMapDesc.value = guess.deskripsi;
+    if (guess.bobot) scMapBobot.value = guess.bobot;
+
+    scMappingCard.style.display = 'block';
+    scGenerateQueue();
+  }
+
+  function scGenerateQueue() {
+    const mapping = {
+      kode_mk: scMapKodeMK.value,
+      mata_kuliah: scMapMK.value,
+      kode_cpmk: scMapKodeCPMK.value,
+      kode_sub: scMapKodeSub.value,
+      deskripsi: scMapDesc.value,
+      bobot: scMapBobot.value
+    };
+
+    if (!mapping.kode_mk || !mapping.kode_cpmk || !mapping.kode_sub) {
+      scControlsCard.style.display = 'none';
+      scPreviewCard.style.display = 'none';
+      return;
+    }
+
+    const built = SubCPMK.buildQueue(scRows, mapping, { dedupe: true });
+    scInvalidCount = built.invalid.length;
+
+    const prevFilter = scFilterMK.value;
+    const mkSet = Array.from(new Set(built.items.map(i => i.kodeMK))).sort();
+    scFilterMK.innerHTML = '<option value="ALL">-- Semua Mata Kuliah dalam File --</option>';
+    mkSet.forEach(k => {
+      const opt = document.createElement('option');
+      opt.value = k;
+      opt.textContent = k;
+      if (k === prevFilter) opt.selected = true;
+      scFilterMK.appendChild(opt);
+    });
+
+    let items = built.items;
+    if (prevFilter && prevFilter !== 'ALL') items = items.filter(i => i.kodeMK === prevFilter);
+    scQueue = items;
+
+    scControlsCard.style.display = 'block';
+    scPreviewCard.style.display = 'block';
+    scUpdateStats();
+    scRenderTable();
+
+    const cpmkGroups = new Set(items.map(i => `${i.kodeMK}|${i.kodeCPMK}`)).size;
+    addLog(`[Sub-CPMK] ${items.length} Sub-CPMK dari ${mkSet.length} MK & ${cpmkGroups} CPMK siap diantrikan${scInvalidCount ? ` (${scInvalidCount} baris tidak valid)` : ''}.`, 'info');
+  }
+
+  function scRenderTable() {
+    if (!scTableBody) return;
+    scTableBody.innerHTML = '';
+    if (scBadgeCount) scBadgeCount.textContent = `${scQueue.length} Data`;
+
+    scQueue.forEach((item, idx) => {
+      const tr = document.createElement('tr');
+      tr.id = `sc-row-${item.id}`;
+      const tooltip = item.errorMessage ? `title="${escapeHtml(item.errorMessage)}"` : '';
+      tr.innerHTML = `
+        <td class="text-slate-500">${idx + 1}</td>
+        <td><div class="max-w-[80px] truncate" title="${escapeHtml(item.namaMK || item.kodeMK)}">${escapeHtml(item.kodeMK)}</div></td>
+        <td class="text-xs">${escapeHtml(item.kodeCPMK)}</td>
+        <td class="text-xs"><strong>${escapeHtml(item.kode)}</strong></td>
+        <td ${tooltip}>${SC_STATUS_BADGE[item.status] || SC_STATUS_BADGE.pending}</td>
+      `;
+      scTableBody.appendChild(tr);
+    });
+  }
+
+  function scUpdateStats() {
+    const total = scQueue.length;
+    const success = scQueue.filter(q => q.status === 'success').length;
+    const skipped = scQueue.filter(q => q.status === 'skipped').length;
+    const failed = scQueue.filter(q => q.status === 'failed').length;
+    const pending = scQueue.filter(q => q.status === 'pending').length;
+
+    scStatTotal.textContent = total;
+    scStatPending.textContent = pending;
+    scStatSuccess.textContent = success;
+    scStatSkipped.textContent = skipped;
+    scStatFailed.textContent = failed;
+
+    const processed = success + skipped + failed;
+    const percent = total > 0 ? Math.round((processed / total) * 100) : 0;
+    scProgressBar.style.width = `${percent}%`;
+    scPercentText.textContent = `${percent}%`;
+
+    if (scRunning) {
+      scStatusText.textContent = `Memproses... (${processed}/${total})`;
+    } else if (total > 0 && percent === 100) {
+      scStatusText.textContent = `Selesai! (${success} sukses, ${skipped} dilewati, ${failed} gagal)`;
+    } else {
+      scStatusText.textContent = total > 0 ? `Siap (${pending} antri)` : 'Menunggu data';
+    }
+
+    if (scBtnPause) scBtnPause.style.display = scRunning ? 'inline-flex' : 'none';
+    if (scBtnStop) scBtnStop.style.display = scRunning ? 'inline-flex' : 'none';
+    if (scBtnStart) scBtnStart.style.display = scRunning ? 'none' : 'inline-flex';
+  }
+
+  function scSetRunning(state) {
+    scRunning = state;
+    if (scBtnStart) scBtnStart.style.display = state ? 'none' : 'inline-flex';
+    if (scBtnPause) scBtnPause.style.display = state ? 'inline-flex' : 'none';
+    if (scBtnStop) scBtnStop.style.display = state ? 'inline-flex' : 'none';
+  }
+
+  scBtnBrowse?.addEventListener('click', () => scFileInput.click());
+  scDropzone?.addEventListener('click', (e) => { if (e.target === scDropzone) scFileInput.click(); });
+  scDropzone?.addEventListener('dragover', (e) => { e.preventDefault(); scDropzone.classList.add('dragover'); });
+  scDropzone?.addEventListener('dragleave', () => scDropzone.classList.remove('dragover'));
+  scDropzone?.addEventListener('drop', (e) => {
+    e.preventDefault();
+    scDropzone.classList.remove('dragover');
+    if (e.dataTransfer.files?.[0]) scHandleFile(e.dataTransfer.files[0]);
+  });
+  scFileInput?.addEventListener('change', (e) => {
+    if (e.target.files?.[0]) scHandleFile(e.target.files[0]);
+  });
+  scSelectSheet?.addEventListener('change', (e) => { if (scWorkbook) scLoadSheet(e.target.value); });
+  scBtnRemoveFile?.addEventListener('click', async () => {
+    scResetState();
+    await chrome.storage.local.set({ malaqbi_sub_queue: [], malaqbi_sub_running: false });
+    addLog('[Sub-CPMK] File dihapus, antrian dikosongkan.', 'info');
+  });
+
+  [scMapKodeMK, scMapMK, scMapKodeCPMK, scMapKodeSub, scMapDesc, scMapBobot, scFilterMK].forEach(el => {
+    el?.addEventListener('change', () => scGenerateQueue());
+  });
+
+  scBtnStart?.addEventListener('click', async () => {
+    if (scQueue.length === 0) {
+      showToast('Belum ada antrian Sub-CPMK yang disiapkan.');
+      return;
+    }
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (!tab?.url?.includes('malaqbi.unsulbar.ac.id')) {
+      if (!confirm('Tab aktif bukan halaman MALAQBI. Buka halaman Mata Kuliah sekarang?')) return;
+      chrome.tabs.create({ url: 'https://malaqbi.unsulbar.ac.id/admin/mata-kuliah' });
+      return;
+    }
+
+    // Semua item pending bila dijalankan ulang setelah selesai
+    if (!scQueue.some(q => q.status === 'pending')) {
+      scQueue.forEach(q => { q.status = 'pending'; delete q.errorMessage; });
+    }
+
+    const firstPending = scQueue.find(q => q.status === 'pending');
+    const delayMs = Math.round((parseFloat(scInputDelay.value) || 1.5) * 1000);
+
+    await chrome.storage.local.set({
+      malaqbi_sub_queue: scQueue,
+      malaqbi_sub_running: true,
+      malaqbi_sub_delay_ms: delayMs
+    });
+
+    scSetRunning(true);
+    scUpdateStats();
+    scRenderTable();
+    addLog(`[Sub-CPMK] Otomasi dimulai. MK pertama: ${firstPending.kodeMK}${firstPending.namaMK ? ' - ' + firstPending.namaMK : ''}.`, 'info');
+
+    const targetUrl = `https://malaqbi.unsulbar.ac.id/admin/mata-kuliah?search=${encodeURIComponent(firstPending.kodeMK)}`;
+    chrome.tabs.update(tab.id, { url: targetUrl });
+  });
+
+  scBtnPause?.addEventListener('click', async () => {
+    await chrome.storage.local.set({ malaqbi_sub_running: false });
+    scSetRunning(false);
+    scUpdateStats();
+    showToast('Otomasi Sub-CPMK dijeda.');
+    addLog('[Sub-CPMK] Otomasi dijeda.', 'warn');
+  });
+
+  scBtnStop?.addEventListener('click', async () => {
+    await chrome.storage.local.set({ malaqbi_sub_running: false });
+    scSetRunning(false);
+    scQueue.forEach(q => { if (q.status === 'processing') q.status = 'pending'; });
+    await chrome.storage.local.set({ malaqbi_sub_queue: scQueue });
+    scUpdateStats();
+    scRenderTable();
+    showToast('Otomasi Sub-CPMK dihentikan.');
+    addLog('[Sub-CPMK] Otomasi dihentikan.', 'error');
+  });
+
+  scBtnReset?.addEventListener('click', async () => {
+    if (scQueue.length === 0 && !scWorkbook) {
+      showToast('Tidak ada antrian Sub-CPMK yang bisa direset.');
+      return;
+    }
+    scSetRunning(false);
+    await chrome.storage.local.set({
+      malaqbi_sub_queue: [],
+      malaqbi_sub_running: false
+    });
+    scResetState();
+    showToast('Antrian Sub-CPMK direset. Silakan unggah file baru.');
+    addLog('[Sub-CPMK] Antrian & histori dihapus.', 'warn');
+  });
+
   /* ================= 8. LISTENER BROADCAST DARI CONTENT SCRIPT ================= */
   chrome.runtime.onMessage.addListener((message) => {
     const { action, payload } = message || {};
@@ -1096,6 +1448,41 @@ document.addEventListener('DOMContentLoaded', async () => {
         btnPauseQueue.style.display = 'none';
         showToast(`Terhenti: ${error}`);
       }
+    }
+
+    if (action === 'SUB_QUEUE_STATUS_UPDATE') {
+      const { queue, index, status, reason } = payload || {};
+      if (queue) {
+        scQueue = queue;
+        scUpdateStats();
+        scRenderTable();
+      }
+      if (status === 'processing') {
+        const item = scQueue[index];
+        addLog(`[Sub-CPMK] Mengisi: ${item?.kode} (${item?.kodeCPMK} · ${item?.kodeMK})...`, 'info');
+        document.getElementById(`sc-row-${item?.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      } else if (status === 'opening_mk') {
+        const item = scQueue[index];
+        addLog(`[Sub-CPMK] Membuka detail mata kuliah ${item?.kodeMK}...`, 'info');
+      } else if (status === 'item_success') {
+        const item = scQueue[index];
+        addLog(`[Sub-CPMK] Berhasil disimpan: ${item?.kode} (${item?.kodeCPMK})`, 'success');
+      } else if (status === 'item_skipped') {
+        const item = scQueue[index];
+        addLog(`[Sub-CPMK][DILEWATI] ${item?.kode || ''}: ${reason || 'Sudah ada'}`, 'skip');
+      } else if (status === 'error') {
+        const item = scQueue[index];
+        addLog(`[Sub-CPMK] Gagal: ${reason} (pada ${item?.kode || ''})`, 'error');
+      }
+    }
+
+    if (action === 'SUB_QUEUE_FINISHED') {
+      scSetRunning(false);
+      if (payload?.queue) scQueue = payload.queue;
+      scUpdateStats();
+      scRenderTable();
+      showToast('Seluruh antrian Sub-CPMK selesai diproses!');
+      addLog('[Sub-CPMK] Semua antrian selesai diproses.', 'success');
     }
 
     if (action === 'QUEUE_FINISHED') {
@@ -1180,6 +1567,24 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   } catch (e) {
     console.warn('Gagal memuat status antrian tersimpan:', e);
+  }
+
+  // Pulihkan antrian Sub-CPMK dari storage
+  try {
+    const savedSub = await chrome.storage.local.get(['malaqbi_sub_queue', 'malaqbi_sub_running', 'malaqbi_sub_delay_ms']);
+    if (savedSub.malaqbi_sub_queue && savedSub.malaqbi_sub_queue.length > 0) {
+      scQueue = savedSub.malaqbi_sub_queue;
+      scControlsCard.style.display = 'block';
+      scPreviewCard.style.display = 'block';
+      if (savedSub.malaqbi_sub_delay_ms) {
+        scInputDelay.value = (savedSub.malaqbi_sub_delay_ms / 1000).toFixed(1);
+      }
+      scSetRunning(!!savedSub.malaqbi_sub_running);
+      scUpdateStats();
+      scRenderTable();
+    }
+  } catch (e) {
+    console.warn('Gagal memuat antrian Sub-CPMK tersimpan:', e);
   }
 
   // Polling deteksi tab aktif setiap 3 detik

@@ -31,6 +31,10 @@
       <i class="fa-solid fa-list-check"></i>
       Antrian CPMK
     </button>
+    <button class="tab-btn" data-tab="tab-sub" title="Antrian Data Sub-CPMK per Mata Kuliah">
+      <i class="fa-solid fa-sitemap"></i>
+      Sub CPMK
+    </button>
     <button class="tab-btn" data-tab="tab-settings" title="Pengaturan &amp; AI">
       <i class="fa-solid fa-sliders"></i>
       Pengaturan
@@ -226,6 +230,158 @@
           <tbody id="queue-table-body">
             <!-- Diisi lewat JavaScript -->
           </tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <!-- TAB 1B: ANTRIAN SUB-CPMK -->
+  <main id="tab-sub" class="tab-content">
+    <section class="card dropzone-card">
+      <div id="sc-dropzone" class="dropzone">
+        <input type="file" id="sc-file-input" accept=".xlsx, .xls, .csv" hidden>
+        <div class="dropzone-content">
+          <i class="fa-solid fa-file-excel dropzone-icon"></i>
+          <p class="dropzone-title">Tarik &amp; lepas file Excel Sub-CPMK</p>
+          <p class="dropzone-sub">atau <span class="text-maroon font-medium cursor-pointer" id="sc-btn-browse">pilih file dari komputer</span></p>
+        </div>
+      </div>
+
+      <div id="sc-file-info-bar" class="file-info-bar" style="display: none;">
+        <div class="file-meta">
+          <span class="file-icon"><i class="fa-solid fa-file-excel text-maroon"></i></span>
+          <div>
+            <span id="sc-file-name" class="font-medium text-slate-800">nama_file.xlsx</span>
+            <span id="sc-file-size" class="text-xs text-slate-500 ml-2">(0 KB)</span>
+          </div>
+        </div>
+        <button id="sc-btn-remove-file" class="btn-icon" title="Hapus file"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+
+      <div id="sc-sheet-wrapper" class="form-group mt-3" style="display: none;">
+        <label for="sc-select-sheet" class="form-label">Pilih Sheet Excel:</label>
+        <select id="sc-select-sheet" class="form-select"></select>
+      </div>
+    </section>
+
+    <section id="sc-mapping-card" class="card mt-3" style="display: none;">
+      <div class="card-header">
+        <h2 class="card-title">Pemetaan Kolom Sub-CPMK</h2>
+      </div>
+      <p class="text-xs text-slate-500 mb-3">Pilih kolom sumber: Mata Kuliah, CPMK, lalu Sub-CPMK-nya.</p>
+
+      <div class="grid grid-cols-1 gap-2.5">
+        <div class="form-row">
+          <label class="form-label-inline">Kode MK:</label>
+          <select id="sc-map-kodemk" class="form-select form-select-sm"></select>
+        </div>
+        <div class="form-row">
+          <label class="form-label-inline">Nama MK (opsional):</label>
+          <select id="sc-map-mk" class="form-select form-select-sm"></select>
+        </div>
+        <div class="form-row">
+          <label class="form-label-inline">Kode CPMK:</label>
+          <select id="sc-map-kodecpmk" class="form-select form-select-sm"></select>
+        </div>
+        <div class="form-row">
+          <label class="form-label-inline">Kode Sub-CPMK:</label>
+          <select id="sc-map-kodesub" class="form-select form-select-sm"></select>
+        </div>
+        <div class="form-row">
+          <label class="form-label-inline">Deskripsi:</label>
+          <select id="sc-map-desc" class="form-select form-select-sm"></select>
+        </div>
+        <div class="form-row">
+          <label class="form-label-inline">Bobot (%):</label>
+          <select id="sc-map-bobot" class="form-select form-select-sm"></select>
+        </div>
+      </div>
+
+      <div class="form-group mt-3">
+        <label for="sc-filter-mk" class="form-label">Filter Input Mata Kuliah:</label>
+        <select id="sc-filter-mk" class="form-select form-select-sm">
+          <option value="ALL">-- Semua Mata Kuliah dalam File --</option>
+        </select>
+      </div>
+    </section>
+
+    <section id="sc-controls-card" class="card mt-3" style="display: none;">
+      <div class="queue-stats">
+        <div class="stat-item">
+          <span class="stat-val text-slate-800" id="sc-stat-total">0</span>
+          <span class="stat-label">Total</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-val text-maroon" id="sc-stat-pending">0</span>
+          <span class="stat-label">Antri</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-val text-maroon" id="sc-stat-success">0</span>
+          <span class="stat-label">Sukses</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-val text-amber-600" id="sc-stat-skipped">0</span>
+          <span class="stat-label">Dilewati</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-val text-rose-600" id="sc-stat-failed">0</span>
+          <span class="stat-label">Gagal</span>
+        </div>
+      </div>
+
+      <div class="progress-bar-container mt-3">
+        <div id="sc-progress-bar" class="progress-bar-fill" style="width: 0%;"></div>
+      </div>
+      <div class="flex justify-between text-xs text-slate-500 mt-1">
+        <span id="sc-status-text">Siap memulai</span>
+        <span id="sc-percent-text">0%</span>
+      </div>
+
+      <div class="action-buttons mt-4 flex flex-wrap gap-2">
+        <button id="sc-btn-start" class="btn btn-primary flex-1">
+          <i class="fa-solid fa-play mr-1.5"></i>
+          Mulai Sub-CPMK
+        </button>
+        <button id="sc-btn-reset" class="btn btn-outline-maroon" title="Hentikan proses &amp; kosongkan antrian Sub-CPMK">
+          <i class="fa-solid fa-eraser mr-1.5"></i>
+          Reset
+        </button>
+        <button id="sc-btn-pause" class="btn btn-warning" style="display: none;">
+          <i class="fa-solid fa-pause mr-1.5"></i>
+          Jeda
+        </button>
+        <button id="sc-btn-stop" class="btn btn-danger" style="display: none;">
+          <i class="fa-solid fa-stop mr-1.5"></i>
+          Stop
+        </button>
+      </div>
+
+      <div class="flex items-center justify-between mt-3 pt-2 text-xs text-slate-500 border-t border-slate-100">
+        <span>Jeda Delay Antar Input:</span>
+        <div class="flex items-center gap-1.5">
+          <input type="number" id="sc-input-delay" min="0.5" max="10" step="0.5" value="1.5" class="input-number">
+          <span>detik</span>
+        </div>
+      </div>
+    </section>
+
+    <section id="sc-preview-card" class="card mt-3 mb-6" style="display: none;">
+      <div class="card-header flex justify-between items-center mb-2">
+        <h2 class="card-title">Daftar Antrian Sub-CPMK</h2>
+        <span id="sc-badge-count" class="badge badge-maroon"><i class="fa-solid fa-table-list mr-1"></i>0 Data</span>
+      </div>
+      <div class="table-container">
+        <table class="ods-table">
+          <thead>
+            <tr>
+              <th style="width: 32px;">#</th>
+              <th>MK</th>
+              <th>CPMK</th>
+              <th>Sub-CPMK</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody id="sc-table-body"></tbody>
         </table>
       </div>
     </section>
@@ -457,6 +613,7 @@
   <script src="lib/xlsx.full.min.js"></script>
   <script src="lib/ai_service.js"></script>
   <script src="lib/matcher.js"></script>
+  <script src="lib/subcpmk.js"></script>
   <script src="sidepanel.js"></script>
 </body>
 </html>
