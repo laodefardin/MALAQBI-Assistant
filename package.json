@@ -1,0 +1,27 @@
+{
+  "name": "malaqbi-cpmk-assistant",
+  "version": "1.0.0",
+  "description": "Ekstensi browser Google Chrome berbasis Manifest V3 dengan Side Panel dan kecerdasan buatan (Google Gemini & OpenAI) untuk mengotomasi penginputan data **Capaian Pembelajaran Mata Kuliah (CPMK)** dan **Sub-CPMK** ke sistem akademik MALAQBI Universitas Sulawesi Barat (`https://malaqbi.unsulbar.ac.id/admin/cpmk`).",
+  "main": "background.js",
+  "directories": {
+    "lib": "lib"
+  },
+  "scripts": {
+    "test": "node test-extension.js && node tests/subcpmk-flow.spec.js && node tests/subcpmk-bootstrap.spec.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/laodefardin/MALAQBI-Assistant.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/laodefardin/MALAQBI-Assistant/issues"
+  },
+  "homepage": "https://github.com/laodefardin/MALAQBI-Assistant#readme",
+  "devDependencies": {
+    "jsdom": "^29.1.1"
+  }
+}

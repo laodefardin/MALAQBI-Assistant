@@ -592,7 +592,20 @@
     return true;
   }
 
-  async function runSubCpmkFlow(attempt = 0) {
+  // Status submit yang sudah dijadwalkan pada halaman form ini (cegah klik Simpan ganda)
+  let subSubmitScheduled = false;
+  // Rantai serial: injeksi content script + pesan START_SUB_FLOW bisa memicu
+  // dua alur pada halaman yang sama; jalankan berurutan agar tidak balapan.
+  let subFlowChain = Promise.resolve();
+
+  function runSubCpmkFlow(attempt = 0) {
+    subFlowChain = subFlowChain
+      .then(() => _runSubCpmkFlow(attempt))
+      .catch((e) => console.error('[MALAQBI Assistant] Alur Sub-CPMK error:', e));
+    return subFlowChain;
+  }
+
+  async function _runSubCpmkFlow(attempt = 0) {
     if (attempt > 60) return;
     try {
       const data = await chrome.storage.local.get(SUB_KEYS);
@@ -617,6 +630,7 @@
 
       /* ---------- HALAMAN FORM: isi & simpan ---------- */
       if (page.type === 'SUB_FORM') {
+        if (subSubmitScheduled) return; // sudah diisi & dijadwalkan submit di halaman ini
         let idx = queue.findIndex(q => q.status === 'processing');
         if (idx === -1) idx = queue.findIndex(q => q.status === 'pending');
         if (idx === -1) {
@@ -651,6 +665,7 @@
         subNotify({ queue, index: idx, status: 'processing' });
 
         setTimeout(() => {
+          subSubmitScheduled = true;
           const btn = form.querySelector('button[type="submit"]');
           if (btn) btn.click();
           else form.submit();
@@ -660,11 +675,17 @@
 
       /* ---------- HALAMAN DAFTAR MK: cari mata kuliah ---------- */
       if (page.type === 'MK_INDEX') {
+        if (queue.some(q => q.status === 'processing')) return; // alur lain sudah berjalan
         const nextIdx = queue.findIndex(q => q.status === 'pending');
         if (nextIdx === -1) { await subFinish(queue); return; }
         const item = queue[nextIdx];
 
         const rows = Array.from(document.querySelectorAll('#datatable tbody tr'));
+        // Tabel server-side kadang belum ter-render saat content script jalan
+        if (rows.length === 0 && attempt < 10) {
+          setTimeout(() => runSubCpmkFlow(attempt + 1), 400);
+          return;
+        }
         let target = null;
         for (const tr of rows) {
           const tds = tr.querySelectorAll('td');
@@ -720,6 +741,7 @@
 
       /* ---------- HALAMAN DETAIL MK: buka form Sub-CPMK ---------- */
       if (page.type === 'MK_DETAIL') {
+        if (queue.some(q => q.status === 'processing')) return; // alur lain sudah berjalan
         const headingKode = (document.querySelector('main h1')?.textContent || '')
           .split('—')[0].trim().toLowerCase();
 

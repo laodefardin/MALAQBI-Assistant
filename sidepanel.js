@@ -1384,15 +1384,31 @@ document.addEventListener('DOMContentLoaded', async () => {
     el?.addEventListener('change', () => scGenerateQueue());
   });
 
+  /**
+   * Mulai alur Sub-CPMK pada tab target. `tabs.update` ke URL yang sama TIDAK
+   * me-reload halaman (Chrome mengabaikannya), sehingga content script tidak
+   * pernah jalan dan antrean tampak "0%". Karena itu content script di-inject
+   * lebih dulu, baru pesan START_SUB_FLOW dikirim. Navigasi hanya fallback.
+   */
+  async function kickSubFlow(tabId, targetUrl) {
+    try {
+      await chrome.scripting.executeScript({ target: { tabId }, files: ['content.js'] });
+      await chrome.tabs.sendMessage(tabId, { action: 'START_SUB_FLOW' });
+      return;
+    } catch (e) {
+      console.warn('[Sub-CPMK] Inject/pesan gagal, fallback navigasi:', e);
+    }
+    try {
+      await chrome.tabs.update(tabId, { url: targetUrl });
+    } catch (e) {
+      showToast('Gagal membuka halaman MALAQBI. Buka manual lalu klik Mulai lagi.');
+      addLog(`[Sub-CPMK] Gagal memulai otomasi: ${e.message}`, 'error');
+    }
+  }
+
   scBtnStart?.addEventListener('click', async () => {
     if (scQueue.length === 0) {
       showToast('Belum ada antrian Sub-CPMK yang disiapkan.');
-      return;
-    }
-    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    if (!tab?.url?.includes('malaqbi.unsulbar.ac.id')) {
-      if (!confirm('Tab aktif bukan halaman MALAQBI. Buka halaman Mata Kuliah sekarang?')) return;
-      chrome.tabs.create({ url: 'https://malaqbi.unsulbar.ac.id/admin/mata-kuliah' });
       return;
     }
 
@@ -1403,6 +1419,10 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     const firstPending = scQueue.find(q => q.status === 'pending');
     const delayMs = Math.round((parseFloat(scInputDelay.value) || 1.5) * 1000);
+
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    const onMalaqbi = !!tab?.url?.includes('malaqbi.unsulbar.ac.id');
+    if (!onMalaqbi && !confirm('Tab aktif bukan halaman MALAQBI. Buka halaman Mata Kuliah sekarang?')) return;
 
     await chrome.storage.local.set({
       malaqbi_sub_queue: scQueue,
@@ -1415,8 +1435,13 @@ document.addEventListener('DOMContentLoaded', async () => {
     scRenderTable();
     addLog(`[Sub-CPMK] Otomasi dimulai. MK pertama: ${firstPending.kodeMK}${firstPending.namaMK ? ' - ' + firstPending.namaMK : ''}.`, 'info');
 
-    const targetUrl = `https://malaqbi.unsulbar.ac.id/admin/mata-kuliah?search=${encodeURIComponent(firstPending.kodeMK)}`;
-    chrome.tabs.update(tab.id, { url: targetUrl });
+    // Tab baru langsung memuat content script dengan status running yang baru disimpan
+    if (!onMalaqbi || !tab?.id) {
+      await chrome.tabs.create({ url: 'https://malaqbi.unsulbar.ac.id/admin/mata-kuliah' });
+      return;
+    }
+
+    await kickSubFlow(tab.id, `https://malaqbi.unsulbar.ac.id/admin/mata-kuliah?search=${encodeURIComponent(firstPending.kodeMK)}`);
   });
 
   scBtnPause?.addEventListener('click', async () => {
