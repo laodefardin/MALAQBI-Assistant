@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "MALAQBI CPMK Assistant",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Asisten cerdas otomasi input CPMK MALAQBI Unsulbar dari file Excel dengan AI Matcher (Gemini & OpenAI)",
   "icons": {
     "16": "icons/icon16.png",

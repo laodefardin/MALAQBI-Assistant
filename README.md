@@ -146,7 +146,11 @@ Ekstensi dilengkapi rangkaian pengujian unit dan integrasi otomatis (`test-exten
 19. Modul **Sub-CPMK**: heuristik kolom (Kode MK / Kode CPMK / Kode Sub-CPMK / Bobot), normalisasi bobot desimal, deduplikasi, dan pengurutan MK → CPMK → Sub-CPMK.
 20. Integrasi tab **Sub CPMK**: elemen UI, pemetaan kolom, penyimpanan `malaqbi_sub_*`, deteksi rute `mata-kuliah` & `/sub-cpmk/create`, pengisian form, dan anti-duplikasi di content script.
 21. Tombol **Deteksi AI** Sub-CPMK: prompt 6 target kolom, sampel maksimal 3 baris, validasi JSON, status loading, dan penerapan hasil otomatis ke dropdown pemetaan.
-22. **Harness jsdom alur Sub-CPMK** (`tests/subcpmk-flow.spec.js`): menjalankan `content.js` terhadap dump HTML asli portal (daftar MK → detail MK → form Sub-CPMK → redirect pasca simpan) dan memastikan status berpindah `pending` → `skipped`/`processing` → `success`, form terisi dari antrean, serta `malaqbi_sub_running` dimatikan saat antrean habis.
+22. **Harness jsdom alur Sub-CPMK** (`tests/subcpmk-flow.spec.js`): menjalankan `content.js` terhadap dump HTML asli portal (daftar MK → detail MK → form Sub-CPMK → redirect pasca simpan) dan memastikan status berpindah `pending` → `skipped`/`processing` → `success`, form terisi dari antrean, serta `malaqbi_sub_running` dimatikan saat antrean habis. Termasuk regresi **dua MK berurutan yang dilewati** (rantai skip tidak boleh *deadlock*).
 23. **Harness bootstrap Sub-CPMK** (`tests/subcpmk-bootstrap.spec.js`): memastikan tombol **Mulai** meng-inject `content.js` lalu mengirim `START_SUB_FLOW` — bukan hanya `tabs.update` ke URL yang sama (Chrome mengabaikannya sehingga antrean tidak pernah diproses).
+
+### Resolusi `mkId` tanpa navigasi
+
+Daftar Mata Kuliah di portal hanya menampilkan 10 baris per halaman (7 halaman untuk 64 MK), sehingga kode MK tidak selalu ada di halaman yang sedang terbuka. Content script kini mengambil `GET /admin/mata-kuliah?search=KODE` lewat `fetch` same-origin (cookie sesi ikut) lalu mem-parse `#datatable` dengan `DOMParser` untuk membaca **mkId** (kolom ke-7, jumlah CPMK) — tanpa reload, tanpa bergantung pagination, dan tanpa risiko navigasi yang diabaikan Chrome. Semua perpindahan halaman memakai `subGoto()` yang memaksa `location.reload()` bila URL tujuan identik dengan URL sekarang.
 
 Jalankan seluruh pengujian dengan `npm test`.

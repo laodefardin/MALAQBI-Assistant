@@ -545,6 +545,44 @@
     chrome.runtime.sendMessage({ action: 'SUB_QUEUE_FINISHED', payload: { queue } }).catch(() => {});
   }
 
+  /**
+   * Navigasi yang tetap bekerja walau URL tujuan sama dengan URL sekarang.
+   * `location.href = url` ke URL identitas adalah no-op di Chrome → alur mati diam-diam.
+   */
+  function subGoto(url) {
+    const target = new URL(url, window.location.href).href;
+    if (target === window.location.href) window.location.reload();
+    else window.location.href = target;
+  }
+
+  /**
+   * Resolusi kode MK → { mkId, cpmkCount } lewat fetch same-origin (cookie ikut).
+   * Tidak memakai navigasi `?search=` sehingga tidak ada reload halaman, tidak
+   * bergantung pagination, dan tidak bisa no-op.
+   */
+  async function subResolveMk(kodeMK) {
+    const want = String(kodeMK || '').trim().toLowerCase();
+    if (!want) return null;
+    try {
+      const res = await fetch(`${SUB_INDEX_URL}?search=${encodeURIComponent(kodeMK)}`, { credentials: 'include' });
+      if (!res.ok) return null;
+      const doc = new DOMParser().parseFromString(await res.text(), 'text/html');
+      for (const tr of doc.querySelectorAll('#datatable tbody tr')) {
+        const tds = tr.querySelectorAll('td');
+        if ((tds[1]?.textContent || '').trim().toLowerCase() !== want) continue;
+        const link = Array.from(tr.querySelectorAll('a[href*="/admin/mata-kuliah/"]'))
+          .find(a => /\d+$/.test(a.getAttribute('href') || '') && !/edit/.test(a.getAttribute('href')));
+        const mkId = link && (link.getAttribute('href') || '').match(/mata-kuliah\/(\d+)/);
+        const cpmkCount = parseInt((tds[6]?.textContent || '').replace(/[^0-9]/g, ''), 10);
+        return { mkId: mkId ? mkId[1] : '', cpmkCount: isNaN(cpmkCount) ? null : cpmkCount };
+      }
+      return null;
+    } catch (e) {
+      console.warn('[MALAQBI Assistant] Gagal mengambil data mata kuliah:', e);
+      return null;
+    }
+  }
+
   /** Cari kartu CPMK berdasarkan kode (h3 di dalam detail mata kuliah) */
   function findSubCpmkCard(kodeCPMK) {
     const target = String(kodeCPMK || '').trim().toLowerCase();
@@ -594,15 +632,32 @@
 
   // Status submit yang sudah dijadwalkan pada halaman form ini (cegah klik Simpan ganda)
   let subSubmitScheduled = false;
-  // Rantai serial: injeksi content script + pesan START_SUB_FLOW bisa memicu
-  // dua alur pada halaman yang sama; jalankan berurutan agar tidak balapan.
-  let subFlowChain = Promise.resolve();
+  // Penjaga re-entrant: injeksi content script + pesan START_SUB_FLOW bisa
+  // memicu dua alur sekaligus, dan rantai "lewati item" berjalan beruntun.
+  // JANGAN memakai promise chain — `return runSubCpmkFlow()` di dalam alur akan
+  // menunggu promise-nya sendiri (deadlock) sehingga antrean berhenti diam-diam.
+  let subFlowBusy = false;
+  let subFlowQueued = false;
 
   function runSubCpmkFlow(attempt = 0) {
-    subFlowChain = subFlowChain
-      .then(() => _runSubCpmkFlow(attempt))
-      .catch((e) => console.error('[MALAQBI Assistant] Alur Sub-CPMK error:', e));
-    return subFlowChain;
+    if (subFlowBusy) {
+      subFlowQueued = true;
+      return;
+    }
+    subFlowBusy = true;
+    _runSubCpmkFlow(attempt)
+      .catch(async (e) => {
+        console.error('[MALAQBI Assistant] Alur Sub-CPMK error:', e);
+        await subSave({ malaqbi_sub_running: false });
+        subNotify({ queue: null, status: 'error', reason: e.message });
+      })
+      .finally(() => {
+        subFlowBusy = false;
+        if (subFlowQueued) {
+          subFlowQueued = false;
+          runSubCpmkFlow(attempt + 1);
+        }
+      });
   }
 
   async function _runSubCpmkFlow(attempt = 0) {
@@ -673,69 +728,47 @@
         return;
       }
 
-      /* ---------- HALAMAN DAFTAR MK: cari mata kuliah ---------- */
+      /* ---------- HALAMAN DAFTAR MK: resolusi kode MK → mkId ---------- */
       if (page.type === 'MK_INDEX') {
         if (queue.some(q => q.status === 'processing')) return; // alur lain sudah berjalan
-        const nextIdx = queue.findIndex(q => q.status === 'pending');
-        if (nextIdx === -1) { await subFinish(queue); return; }
-        const item = queue[nextIdx];
 
-        const rows = Array.from(document.querySelectorAll('#datatable tbody tr'));
-        // Tabel server-side kadang belum ter-render saat content script jalan
-        if (rows.length === 0 && attempt < 10) {
-          setTimeout(() => runSubCpmkFlow(attempt + 1), 400);
-          return;
-        }
-        let target = null;
-        for (const tr of rows) {
-          const tds = tr.querySelectorAll('td');
-          const kode = (tds[1]?.textContent || '').trim();
-          if (kode.toLowerCase() === item.kodeMK.toLowerCase()) { target = { tr, tds }; break; }
-        }
+        // Selesaikan beruntun MK yang dilewati (CPMK = 0) dalam satu halaman.
+        let nextIdx = queue.findIndex(q => q.status === 'pending');
+        while (nextIdx !== -1) {
+          const item = queue[nextIdx];
+          const info = await subResolveMk(item.kodeMK);
 
-        if (!target) {
-          const hasSearch = new URLSearchParams(window.location.search).has('search');
-          if (!hasSearch) {
-            window.location.search = `?search=${encodeURIComponent(item.kodeMK)}`;
-            return;
+          if (!info || !info.mkId) {
+            item.status = 'failed';
+            item.errorMessage = `Mata kuliah ${item.kodeMK} tidak ditemukan di portal`;
+            item.timestamp = nowTime();
+            await subSave({ malaqbi_sub_queue: queue });
+            subNotify({ queue, index: nextIdx, status: 'error', reason: item.errorMessage });
+            nextIdx = queue.findIndex(q => q.status === 'pending');
+            continue;
           }
-          item.status = 'failed';
-          item.errorMessage = `Mata kuliah ${item.kodeMK} tidak ditemukan`;
+
+          // Kolom CPMK = 0 → tidak perlu dibuka
+          if (info.cpmkCount === 0) {
+            item.status = 'skipped';
+            item.errorMessage = 'Mata kuliah belum memiliki CPMK (kolom CPMK = 0)';
+            item.timestamp = nowTime();
+            await subSave({ malaqbi_sub_queue: queue });
+            subNotify({ queue, index: nextIdx, status: 'item_skipped', reason: item.errorMessage });
+            nextIdx = queue.findIndex(q => q.status === 'pending');
+            continue;
+          }
+
+          item.mkId = info.mkId;
           item.timestamp = nowTime();
           await subSave({ malaqbi_sub_queue: queue });
-          subNotify({ queue, index: nextIdx, status: 'error', reason: item.errorMessage });
-          return runSubCpmkFlow(attempt + 1);
-        }
+          subNotify({ queue, index: nextIdx, status: 'opening_mk' });
 
-        // Kolom CPMK = 0 → tidak perlu dibuka
-        const cpmkCountTxt = (target.tds[6]?.textContent || '').trim();
-        const cpmkCount = parseInt(cpmkCountTxt.replace(/[^0-9]/g, ''), 10);
-        if (cpmkCountTxt !== '' && !isNaN(cpmkCount) && cpmkCount === 0) {
-          item.status = 'skipped';
-          item.errorMessage = 'Mata kuliah belum memiliki CPMK (kolom CPMK = 0)';
-          item.timestamp = nowTime();
-          await subSave({ malaqbi_sub_queue: queue });
-          subNotify({ queue, index: nextIdx, status: 'item_skipped', reason: item.errorMessage });
-          return runSubCpmkFlow(attempt + 1);
-        }
-
-        const detailLink = Array.from(target.tr.querySelectorAll('a[href*="/admin/mata-kuliah/"]'))
-          .find(a => /\d+$/.test(a.getAttribute('href') || '') && !/edit/.test(a.getAttribute('href')));
-        if (!detailLink) {
-          item.status = 'failed';
-          item.errorMessage = 'Tombol Detail mata kuliah tidak ditemukan';
-          await subSave({ malaqbi_sub_queue: queue });
-          subNotify({ queue, index: nextIdx, status: 'error', reason: item.errorMessage });
+          setTimeout(() => subGoto(`${SUB_INDEX_URL}/${info.mkId}`), delayMs);
           return;
         }
 
-        const mkIdMatch = (detailLink.getAttribute('href') || '').match(/mata-kuliah\/(\d+)/);
-        item.mkId = mkIdMatch ? mkIdMatch[1] : '';
-        item.timestamp = nowTime();
-        await subSave({ malaqbi_sub_queue: queue });
-        subNotify({ queue, index: nextIdx, status: 'opening_mk' });
-
-        setTimeout(() => { window.location.href = detailLink.href; }, delayMs);
+        await subFinish(queue);
         return;
       }
 
@@ -751,7 +784,7 @@
         if (idx === -1) {
           const nextIdx = queue.findIndex(q => q.status === 'pending');
           if (nextIdx === -1) { await subFinish(queue); return; }
-          window.location.href = `${SUB_INDEX_URL}?search=${encodeURIComponent(queue[nextIdx].kodeMK)}`;
+          subGoto(SUB_INDEX_URL);
           return;
         }
 
@@ -792,7 +825,7 @@
         await subSave({ malaqbi_sub_queue: queue });
         subNotify({ queue, index: idx, status: 'processing' });
 
-        setTimeout(() => { window.location.href = addLink.href; }, delayMs);
+        setTimeout(() => subGoto(addLink.href), delayMs);
         return;
       }
     } catch (e) {
@@ -812,11 +845,7 @@
     if (!data.malaqbi_sub_running) return;
     const page = detectSubPage();
     if (page.type === 'OTHER') {
-      const next = await chrome.storage.local.get(['malaqbi_sub_queue']);
-      const firstPending = (next.malaqbi_sub_queue || []).find(q => q.status === 'pending');
-      window.location.href = firstPending
-        ? `${SUB_INDEX_URL}?search=${encodeURIComponent(firstPending.kodeMK)}`
-        : SUB_INDEX_URL;
+      subGoto(SUB_INDEX_URL);
       return;
     }
     runSubCpmkFlow();
