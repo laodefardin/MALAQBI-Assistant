@@ -1074,6 +1074,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   const scSheetWrapper = document.getElementById('sc-sheet-wrapper');
   const scSelectSheet = document.getElementById('sc-select-sheet');
   const scMappingCard = document.getElementById('sc-mapping-card');
+  const scBtnAiDetect = document.getElementById('sc-btn-ai-detect');
   const scMapKodeMK = document.getElementById('sc-map-kodemk');
   const scMapMK = document.getElementById('sc-map-mk');
   const scMapKodeCPMK = document.getElementById('sc-map-kodecpmk');
@@ -1221,6 +1222,43 @@ document.addEventListener('DOMContentLoaded', async () => {
     scMappingCard.style.display = 'block';
     scGenerateQueue();
   }
+
+  scBtnAiDetect?.addEventListener('click', async () => {
+    if (scHeaders.length === 0 || scRows.length === 0) {
+      showToast('Unggah file Excel Sub-CPMK terlebih dahulu.');
+      return;
+    }
+
+    const config = await getActiveAiConfig();
+    scBtnAiDetect.disabled = true;
+    scBtnAiDetect.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-1.5"></i><span>Menganalisis...</span>';
+
+    try {
+      addLog(`[Sub-CPMK] Menjalankan deteksi AI (${config.provider} - ${config.model})...`, 'info');
+      const aiMap = await AIService.detectSubCpmkColumnsWithAI(scHeaders, scRows.slice(0, 3), config);
+      const fields = [
+        ['kode_mk', scMapKodeMK],
+        ['mata_kuliah', scMapMK],
+        ['kode_cpmk', scMapKodeCPMK],
+        ['kode_sub', scMapKodeSub],
+        ['deskripsi', scMapDesc],
+        ['bobot', scMapBobot]
+      ];
+      fields.forEach(([key, select]) => {
+        if (aiMap[key] && scHeaders.includes(aiMap[key])) select.value = aiMap[key];
+      });
+
+      scGenerateQueue();
+      showToast('Kolom Sub-CPMK berhasil dipetakan oleh AI.');
+      addLog('[Sub-CPMK] Pemetaan AI berhasil diaplikasikan.', 'success');
+    } catch (err) {
+      showToast(`Gagal deteksi AI: ${err.message}`);
+      addLog(`[Sub-CPMK] Deteksi AI gagal: ${err.message}`, 'error');
+    } finally {
+      scBtnAiDetect.disabled = false;
+      scBtnAiDetect.innerHTML = '<i class="fa-solid fa-wand-magic-sparkles mr-1.5"></i><span>Deteksi AI</span>';
+    }
+  });
 
   function scGenerateQueue() {
     const mapping = {

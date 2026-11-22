@@ -508,7 +508,17 @@ assert(subBuilt.items[2].kodeMK === 'MAPIA01', 'MK berikutnya diproses setelah M
 assert(subBuilt.items[2].bobot === '25', 'Bobot numerik dikonversi ke string rapi');
 assert(subBuilt.items.every(i => i.status === 'pending'), 'Semua item baru berstatus pending');
 
-console.log('\n🗂️ Test 20: Integrasi Tab Sub-CPMK (UI + Content Script)...');
+console.log('\n🤖 Test 20: Deteksi AI Pemetaan Kolom Sub-CPMK...');
+const aiServiceSource = fs.readFileSync(path.join(__dirname, 'lib', 'ai_service.js'), 'utf8');
+assert(typeof AIService.detectSubCpmkColumnsWithAI === 'function', 'AIService menyediakan detectSubCpmkColumnsWithAI()');
+assert(aiServiceSource.includes('"kode_sub"') && aiServiceSource.includes('"bobot"'), 'Prompt AI Sub-CPMK meminta pemetaan Kode Sub-CPMK & Bobot');
+assert(aiServiceSource.includes('sampleRows.slice(0, 3)'), 'AI Sub-CPMK mengirim sampel maksimal 3 baris');
+assert(aiServiceSource.includes('Respon AI bukan format JSON valid untuk pemetaan kolom Sub-CPMK.'), 'AI Sub-CPMK memvalidasi keluaran JSON');
+assert(htmlContent.includes('id="sc-btn-ai-detect"'), 'Tab Sub-CPMK punya tombol Deteksi AI');
+assert(jsContent.includes('AIService.detectSubCpmkColumnsWithAI'), 'sidepanel.js memanggil AIService untuk pemetaan Sub-CPMK');
+assert(jsContent.includes('Kolom Sub-CPMK berhasil dipetakan oleh AI.'), 'UI memberi konfirmasi ketika pemetaan AI berhasil');
+
+console.log('\n🗂️ Test 21: Integrasi Tab Sub-CPMK (UI + Content Script)...');
 assert(htmlContent.includes('data-tab="tab-sub"'), 'sidepanel.html punya tombol tab Sub CPMK');
 assert(htmlContent.includes('id="tab-sub"'), 'sidepanel.html punya panel #tab-sub');
 assert(htmlContent.includes('id="sc-dropzone"') && htmlContent.includes('id="sc-file-input"'), 'Panel Sub-CPMK punya dropzone & input file sendiri');

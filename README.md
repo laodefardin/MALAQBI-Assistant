@@ -115,7 +115,7 @@ malaqbi-cpmk-assistant/
    - Anda dapat menjeda (**Jeda**) atau menghentikan (**Stop**) kapan saja.
 8. **Modul Sub-CPMK (opsional):**
    - Buka tab **Sub CPMK** (di samping Antrian CPMK).
-   - Unggah Excel berisi kolom `Kode MK`, `Kode CPMK`, `Kode Sub-CPMK`, `Deskripsi`, `Bobot (%)`, lalu periksa pemetaan kolom yang terdeteksi otomatis.
+   - Unggah Excel berisi kolom `Kode MK`, `Kode CPMK`, `Kode Sub-CPMK`, `Deskripsi`, `Bobot (%)`. Pemetaan heuristik berjalan otomatis; klik **Deteksi AI** untuk analisis ulang berbasis Gemini/OpenAI bila nama kolom tidak standar.
    - Klik **"Mulai Sub-CPMK"**. Ekstensi akan membuka daftar Mata Kuliah, melewati MK yang kolom CPMK-nya `0`, masuk ke detail MK, membuka **+ Tambah Sub-CPMK** pada CPMK yang sesuai, mengisi form, menyimpan, lalu lanjut ke Sub-CPMK/CPMK/MK berikutnya otomatis.
 9. **Unduh Riwayat:**
    - Buka tab **Log** untuk melihat catatan proses atau klik **"CSV"** untuk mengekspor riwayat eksekusi.
@@ -124,7 +124,7 @@ malaqbi-cpmk-assistant/
 
 ## Cakupan Automated Tests
 
-Ekstensi dilengkapi rangkaian pengujian unit dan integrasi otomatis (`test-extension.js`) dengan **186 assertions (100% Pass)**:
+Ekstensi dilengkapi rangkaian pengujian unit dan integrasi otomatis (`test-extension.js`) dengan **193 assertions (100% Pass)**:
 1. Pembacaan Excel 3 Sheet & baris data riil.
 2. Deteksi header baris ke-4 dan pemetaan kolom.
 3. Ekstraksi 336 baris & deduplikasi tepat ke 168 CPMK unik.
@@ -145,3 +145,4 @@ Ekstensi dilengkapi rangkaian pengujian unit dan integrasi otomatis (`test-exten
 18. Tombol **Reset Antrian**: pengosongan total daftar antrian, pemulihan dropzone, dan pembersihan `malaqbi_queue` di storage.
 19. Modul **Sub-CPMK**: heuristik kolom (Kode MK / Kode CPMK / Kode Sub-CPMK / Bobot), normalisasi bobot desimal, deduplikasi, dan pengurutan MK → CPMK → Sub-CPMK.
 20. Integrasi tab **Sub CPMK**: elemen UI, pemetaan kolom, penyimpanan `malaqbi_sub_*`, deteksi rute `mata-kuliah` & `/sub-cpmk/create`, pengisian form, dan anti-duplikasi di content script.
+21. Tombol **Deteksi AI** Sub-CPMK: prompt 6 target kolom, sampel maksimal 3 baris, validasi JSON, status loading, dan penerapan hasil otomatis ke dropdown pemetaan.
